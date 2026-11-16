@@ -69,6 +69,13 @@ test('identity panel keeps production facts and existing operations', () => {
   assert.match(identityPanel, /emit\('setup-e911'\)/)
 })
 
+test('a newly detected E911-capable card opens the carrier address page once', () => {
+  assert.match(devicesView, /e911PromptKey\(deviceID, iccid\)/)
+  assert.match(devicesView, /wasE911PromptShown\(browserE911PromptStorage\(\), promptKey\)/)
+  assert.match(devicesView, /openE911Websheet\(\{ automatic: true \}\)/)
+  assert.match(devicesView, /markE911PromptShown\(browserE911PromptStorage\(\), promptKey\)/)
+})
+
 test('cellular signal panel hides invalid modem sentinel values', () => {
   assert.match(overviewTab, /displaySignalDbm/)
   assert.match(overviewTab, /signalDbmDisplay/)

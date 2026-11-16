@@ -25,6 +25,7 @@ import { isManagedDeviceBackendSwitch, isWwanQmiControlPath } from '../utils/dev
 import { firstRemainingDeviceId, isPCSCServiceUnavailable, routeDeviceStillManaged, suggestedAddDeviceId } from '../utils/deviceSelection'
 import { isControlOnline, isRecoveryPhase } from '../utils/deviceLifecycle'
 import { createDeviceRequestScope } from '../utils/deviceRequestScope'
+import { browserE911PromptStorage, e911PromptKey, markE911PromptShown, wasE911PromptShown } from '../utils/e911Onboarding'
 import { getMccMncIndex, lookupMccMncRow, mccMncCountryCode, type MccMncRow } from '../utils/mcc-mnc'
 import type { CardPolicy, CarrierWebsheetInfo, DeviceConfigDTO, DeviceMgmtListItem, DeviceOverviewItem, DiscoveredDevice, ModemStatus, PNNRecord, RealtimeTrafficSnapshot } from '../types/api'
 import type { AppError } from '../types/domain'
@@ -85,6 +86,7 @@ const reconnectingVoWiFi = ref(false)
 const e911Starting = ref(false)
 const e911WebsheetOpen = ref(false)
 const e911Websheet = ref<CarrierWebsheetInfo | null>(null)
+const e911AutoAttempts = new Set<string>()
 const deleting = ref(false)
 const rescanning = ref(false)
 
@@ -920,9 +922,17 @@ async function reconnectVoWiFi() {
   }
 }
 
-async function openE911Websheet() {
-  const id = String(selectedId.value || '').trim()
+async function openE911Websheet(options: { automatic?: boolean } = {}) {
+  const detail = selectedDetail.value
+  const id = String(detail?.id || selectedId.value || '').trim()
+  const iccid = String(detail?.modem?.iccid || '').trim()
+  const promptKey = e911PromptKey(id, iccid)
   if (!id || e911Starting.value) return
+
+  if (options.automatic) {
+    if (!promptKey || e911AutoAttempts.has(promptKey)) return
+    e911AutoAttempts.add(promptKey)
+  }
 
   e911Starting.value = true
   try {
@@ -930,9 +940,14 @@ async function openE911Websheet() {
     if (!result.ok) throw new Error(result.error.message || 'E911地址设置页面打开失败')
     e911Websheet.value = result.data
     e911WebsheetOpen.value = true
+    markE911PromptShown(browserE911PromptStorage(), promptKey)
   } catch (e: unknown) {
     const err = toAppError(e)
-    ElMessage.error(err.message || 'E911地址设置页面打开失败')
+    if (options.automatic) {
+      ElMessage.warning('检测到新卡需要设置 E911 地址，但运营商页面暂时无法打开；稍后可点“设置地址”重试')
+    } else {
+      ElMessage.error(err.message || 'E911地址设置页面打开失败')
+    }
   } finally {
     e911Starting.value = false
   }
@@ -943,6 +958,26 @@ async function finishE911Websheet() {
   e911Websheet.value = null
   await refreshDeviceViews()
 }
+
+watch(
+  () => [
+    selectedDetail.value?.id || '',
+    selectedDetail.value?.modem?.iccid || '',
+    selectedDetail.value?.e911_setup_available === true,
+    selectedDetail.value?.running === true,
+    selectedDetail.value?.control_online === true
+  ] as const,
+  ([deviceID, iccid, setupAvailable, running, controlOnline]) => {
+    if (!deviceID || !iccid || !setupAvailable || !running || !controlOnline) return
+    if (e911Starting.value || e911WebsheetOpen.value) return
+
+    const promptKey = e911PromptKey(deviceID, iccid)
+    if (!promptKey || e911AutoAttempts.has(promptKey)) return
+    if (wasE911PromptShown(browserE911PromptStorage(), promptKey)) return
+    void openE911Websheet({ automatic: true })
+  },
+  { immediate: true }
+)
 
 const rebooting = ref(false)
 async function rebootModem() {
