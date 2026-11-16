@@ -55,6 +55,11 @@ const waitingCall = computed(() => phone.calls.find((item) =>
   item.status === 'waiting' && item.call_id !== call.value?.call_id))
 const selected = computed(() => phone.devices.find((device) => device.id === selectedDevice.value))
 const calleeError = computed(() => dialNumberError(callee.value, selected.value?.phone_region))
+const calleeAttribution = computed(() => {
+  const subtitle = identities.subtitleFor(callee.value, selectedDevice.value)
+  if (!subtitle) return ''
+  return `${identities.titleFor(callee.value, selectedDevice.value)} · ${subtitle}`
+})
 const canPlaceCall = computed(() => !!callee.value && !calleeError.value
   && !!selected.value
   && (isDeviceReady(selected.value) || selected.value.phone_mode === 'cellular' || selected.value.phone_mode === 'volte')
@@ -717,7 +722,7 @@ async function sendDTMF(digit: string) {
               </button>
             </div>
             <small v-if="calleeError" id="callee-error" role="alert">{{ calleeError }}</small>
-            <small v-else-if="identities.subtitleFor(callee, selectedDevice)" class="callee-hint">{{ identities.titleFor(callee, selectedDevice) }}{{ identities.subtitleFor(callee, selectedDevice) ? ` · ${identities.subtitleFor(callee, selectedDevice)}` : '' }}</small>
+            <small v-else class="callee-hint" :aria-hidden="calleeAttribution ? undefined : 'true'">{{ calleeAttribution || '\u00a0' }}</small>
           </div>
 
           <PhoneDialPad allow-plus :plus-disabled="!!callee" @digit="appendDigit" />

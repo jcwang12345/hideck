@@ -73,6 +73,16 @@ test('dialer offers the selected SIM calling code without forcing it onto local 
   assert.doesNotMatch(phoneView, /callee\.value = '\+86'/)
 })
 
+test('phone number attribution keeps stable space when lookup has no result', () => {
+  assert.match(phoneView, /const calleeAttribution = computed/)
+  assert.match(phoneView, /<small v-else class="callee-hint"/)
+  assert.doesNotMatch(phoneView, /v-else-if="identities\.subtitleFor\(callee/)
+  assert.match(phoneCSS, /\.number-field small \{ min-height: 1\.4em;/)
+  assert.match(callHistory, /class="history-attribution"/)
+  assert.doesNotMatch(callHistory, /<p v-if="identities\.subtitleFor\(record\.peer/)
+  assert.match(callHistory, /\.history-attribution \{ min-height: 1\.35em;/)
+})
+
 test('phone view exposes explicit listen-only and microphone call actions without hiding the limitation', () => {
   assert.match(phoneView, /麦克风需要受信任的 HTTPS/)
   assert.match(phoneView, /当前 HTTP 页面可“仅听接听”或“仅听呼叫”/)

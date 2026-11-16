@@ -316,7 +316,10 @@ onUnmounted(() => {
             <span>{{ formatRecordDuration(record) }}</span>
             <span>{{ record.device_id }}</span>
           </div>
-          <p v-if="identities.subtitleFor(record.peer, record.device_id)" class="history-attribution">{{ identities.subtitleFor(record.peer, record.device_id) }}</p>
+          <p
+            class="history-attribution"
+            :aria-hidden="identities.subtitleFor(record.peer, record.device_id) ? undefined : 'true'"
+          >{{ identities.subtitleFor(record.peer, record.device_id) || '\u00a0' }}</p>
           <p v-if="record.recording_error" class="recording-error">录音失败：{{ record.recording_error }}</p>
           <p v-else-if="recordingErrors[record.id]" class="recording-error">{{ recordingErrors[record.id] }}</p>
           <audio
@@ -377,7 +380,7 @@ onUnmounted(() => {
 .history-selection :deep(.el-checkbox) { width: 44px; height: 44px; display: grid; place-items: center; }
 .history-icon { width: 34px; height: 34px; flex: 0 0 34px; display: grid; place-items: center; border-radius: 50%; background: color-mix(in srgb, var(--ui-primary) 10%, var(--ui-surface)); color: var(--ui-primary); }
 .history-icon.is-missed, .history-icon.is-rejected, .history-icon.is-failed { color: var(--ui-danger); background: color-mix(in srgb, var(--ui-danger) 10%, var(--ui-surface)); }
-.history-attribution { margin: 4px 0 0; color: var(--ui-text-muted); font-size: 12px; }
+.history-attribution { min-height: 1.35em; margin: 4px 0 0; color: var(--ui-text-muted); font-size: 12px; line-height: 1.35; }
 .history-icon.is-busy { color: var(--ui-warning); }
 .history-copy { min-width: 0; flex: 1; }
 .history-primary { display: flex; justify-content: space-between; gap: 8px; }
