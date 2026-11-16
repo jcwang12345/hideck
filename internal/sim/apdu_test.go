@@ -4,10 +4,21 @@ import (
 	"bytes"
 	"encoding/hex"
 	"errors"
+	"strings"
 	"testing"
 
 	swusim "github.com/iniwex5/vowifi-go/engine/sim"
 )
+
+func TestParseUSIMAuthResponseRejectsEmptySuccessResponseClearly(t *testing.T) {
+	_, err := ParseUSIMAuthResponse("wwan0", []byte{0x90, 0x00})
+	if err == nil || !strings.Contains(err.Error(), "缺少数据体") {
+		t.Fatalf("ParseUSIMAuthResponse() error = %v, want empty response diagnostic", err)
+	}
+	if strings.Contains(err.Error(), "非 9000") {
+		t.Fatalf("ParseUSIMAuthResponse() error = %v, must not call 9000 a non-success status", err)
+	}
+}
 
 func TestParseUSIMAuthResponseSyncFailureReturnsErrSyncFailureWithAUTS(t *testing.T) {
 	auts := bytes.Repeat([]byte{0xCC}, 14)

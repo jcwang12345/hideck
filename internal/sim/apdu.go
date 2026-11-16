@@ -35,6 +35,9 @@ func BuildUSIMAuthAPDU(rand16, autn16 []byte, includeLe bool) ([]byte, error) {
 // ParseUSIMAuthResponse 解析 USIM AKA 鉴权响应（支持成功/同步失败等分支）。
 func ParseUSIMAuthResponse(deviceID string, resp []byte) (AKAResult, error) {
 	if len(resp) == 2 {
+		if resp[0] == 0x90 && resp[1] == 0x00 {
+			return AKAResult{}, errors.New("APDU AKA 响应缺少数据体: 状态码 9000")
+		}
 		return AKAResult{}, fmt.Errorf("APDU 状态码非 9000: %02X%02X", resp[0], resp[1])
 	}
 	if len(resp) < 4 {

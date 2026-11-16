@@ -291,9 +291,6 @@ func (p *Pool) prepareVoWiFiStartContext(ctx context.Context, deviceID, traceID,
 	if strings.EqualFold(w.Backend.Mode(), backend.BackendPCSC) {
 		startCtx.Mode = runtimehost.StartModeReader
 	}
-	if preferred, ok := akaProvider.(innersim.AKAWithPreferenceProvider); ok {
-		akaProvider = innersim.WrapPreferredAKAProvider(preferred, string(prepared.IMSIdentity.AKAAppPreference))
-	}
 	startCtx.SIM = runtimehost.NewReaderSIMAdapter(akaProvider)
 	logger.Info("VoWiFi 启动画像已准备",
 		"trace_id", traceID,
@@ -438,9 +435,6 @@ func (p *Pool) prepareCellularStartContext(
 	startCtx.Mode = runtimehost.StartModeMain
 	if strings.EqualFold(w.Backend.Mode(), backend.BackendPCSC) {
 		startCtx.Mode = runtimehost.StartModeReader
-	}
-	if preferred, ok := akaProvider.(innersim.AKAWithPreferenceProvider); ok {
-		akaProvider = innersim.WrapPreferredAKAProvider(preferred, string(prepared.IMSIdentity.AKAAppPreference))
 	}
 	startCtx.SIM = runtimehost.NewReaderSIMAdapter(akaProvider)
 

@@ -12,21 +12,41 @@ type readerSIMAdapter struct {
 	provider enginesim.AKAProvider
 }
 
+type preferenceAKAProvider interface {
+	CalculateAKAWithPreference(rand16, autn16 []byte, preference string) (enginesim.AKAResult, error)
+}
+
+type readerPreferredAKAProviderAdapter struct {
+	provider   preferenceAKAProvider
+	preference string
+}
+
+func (adapter readerPreferredAKAProviderAdapter) CalculateAKA(rand16, autn16 []byte) (enginesim.AKAResult, error) {
+	return adapter.provider.CalculateAKAWithPreference(rand16, autn16, adapter.preference)
+}
+
 func NewReaderSIMAdapter(provider enginesim.AKAProvider) *readerSIMAdapter {
 	return &readerSIMAdapter{provider: provider}
 }
 
-func (adapter *readerSIMAdapter) EPDGSIMProvider(_ profile.AuthPlan) enginesim.AKAProvider {
-	if adapter != nil && adapter.provider != nil {
-		return adapter.provider
+func (adapter *readerSIMAdapter) EPDGSIMProvider(plan profile.AuthPlan) enginesim.AKAProvider {
+	if adapter == nil || adapter.provider == nil {
+		return unsupportedSWUAKAProvider{message: "SIM reader has no SWu AKA provider"}
 	}
-	return unsupportedSWUAKAProvider{message: "SIM reader has no SWu AKA provider"}
+	plan = plan.Normalize()
+	if provider, ok := adapter.provider.(preferenceAKAProvider); ok {
+		return readerPreferredAKAProviderAdapter{provider: provider, preference: plan.EPDGApp}
+	}
+	return adapter.provider
 }
 
 func (adapter *readerSIMAdapter) IMSAKAProvider(plan profile.AuthPlan) simauth.AKAProvider {
 	plan = plan.Normalize()
 	if adapter == nil || adapter.provider == nil {
 		return unsupportedIMSAKAProvider{message: "SIM reader has no IMS AKA provider"}
+	}
+	if provider, ok := adapter.provider.(preferenceAKAProvider); ok {
+		return readerPreferredAKAProviderAdapter{provider: provider, preference: plan.IMSApp}
 	}
 	if plan.IMSApp != profile.AKAAppISIM && plan.IMSApp != profile.AKAAppISIMStrict {
 		return readerAKAProviderAdapter{provider: adapter.provider}
