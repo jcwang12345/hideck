@@ -67,6 +67,34 @@ func TestATTUnprovenPortSResetStillRecovers(t *testing.T) {
 	}
 }
 
+func TestATTEstablishedPortSTimeoutAwaitsPeerReconnect(t *testing.T) {
+	for _, preset := range []string{attCarrierPresetID, lycaMobileATTCarrierPresetID} {
+		t.Run(preset, func(t *testing.T) {
+			service := newCarrierAwaitTestService(t, preset)
+			closeEstablishedTestPortS(t, service, syscall.ETIMEDOUT, 2*time.Minute, true)
+			service.handleProtectedServerPushClosed()
+			if stopTestPortSWatch(service) != nil {
+				t.Fatal("AT&T established timeout scheduled a REGISTER instead of awaiting the peer")
+			}
+			if service.reRegisterPending.Load() || service.portSRecoveryPending.Load() {
+				t.Fatal("AT&T established timeout requested REGISTER recovery")
+			}
+			if got := service.SMSReadiness(); !got.Ready || !got.HealthReady || got.Reason != smsReadyReasonOnDemandPortS {
+				t.Fatalf("readiness = %+v, want healthy on-demand receive path", got)
+			}
+		})
+	}
+}
+
+func TestATTSetupTimePortSTimeoutStillRecovers(t *testing.T) {
+	service := newCarrierAwaitTestService(t, attCarrierPresetID)
+	closeEstablishedTestPortS(t, service, syscall.ETIMEDOUT, 5*time.Second, false)
+	service.handleProtectedServerPushClosed()
+	if stopTestPortSWatch(service) == nil {
+		t.Fatal("setup-time AT&T timeout awaited the peer instead of scheduling recovery")
+	}
+}
+
 func TestOneNZPortSResetAwaitsAtAnyIdle(t *testing.T) {
 	for _, idle := range []time.Duration{time.Minute, 13 * time.Minute, 20 * time.Minute} {
 		t.Run(idle.String(), func(t *testing.T) {

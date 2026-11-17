@@ -174,6 +174,22 @@ func TestATTSetupTimePortSResetStillUsesValidatedRecovery(t *testing.T) {
 	}
 }
 
+func TestATTEstablishedPortSTimeoutKeepsOnDemandPolicy(t *testing.T) {
+	s := newPortSTimeoutTestService(t)
+	s.cfg.CarrierPresetID = attCarrierPresetID
+	now := time.Now()
+	s.portSSessionMu.Lock()
+	s.portSSession.openedAt = now.Add(-2 * time.Minute)
+	s.portSSession.closedAt = now
+	s.portSSession.lastInboundAt = now.Add(-time.Minute)
+	s.portSSession.lastCloseKind = portSCloseTimeout
+	policy, enabled := s.validatedPortSFailurePolicy(portSTransportTimeoutFailure)
+	s.portSSessionMu.Unlock()
+	if enabled || policy != "" {
+		t.Fatalf("established AT&T timeout policy = %q enabled=%t, want on-demand handling", policy, enabled)
+	}
+}
+
 func TestVodafoneUKPeerResetWithoutReopenedDownlinkRequestsFreshPath(t *testing.T) {
 	s := newPortSTimeoutTestService(t)
 	closeTestPortS(t, s, syscall.ECONNRESET)

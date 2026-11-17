@@ -490,7 +490,9 @@ func (s *Service) canAwaitOnDemandPortS() bool {
 		return observed || preset == globePHCarrierPresetID || preset == ditoPHCarrierPresetID ||
 			preset == twoDegreesNZCarrierPresetID
 	case portSClosePeerReset:
-		return preset == oneNZCarrierPresetID || attIdlePortSResetCanAwait(preset, session)
+		return preset == oneNZCarrierPresetID || attIdlePortSClosureCanAwait(preset, session)
+	case portSCloseTimeout:
+		return attIdlePortSClosureCanAwait(preset, session)
 	case portSCloseSARetired:
 		// The P-CSCF sends further requests to port_us over the new SAs,
 		// opening a new port-s flow (TS 24.229 5.2.2.2).
@@ -504,12 +506,13 @@ func (s *Service) canAwaitOnDemandPortS() bool {
 // reachable even when no SIP request arrived before the idle reset. Replaying
 // REGISTER immediately after that reset can stall the still-live registration
 // flow, so leave an established flow for the P-CSCF to reopen on demand. A
-// reset during initial setup still follows the normal recovery path.
-func attIdlePortSResetCanAwait(preset string, session portSSessionSnapshot) bool {
+// reset or timeout during initial setup still follows the normal recovery path.
+func attIdlePortSClosureCanAwait(preset string, session portSSessionSnapshot) bool {
 	if preset != attCarrierPresetID && preset != lycaMobileATTCarrierPresetID {
 		return false
 	}
-	if session.lastCloseKind != portSClosePeerReset || session.openedAt.IsZero() ||
+	if (session.lastCloseKind != portSClosePeerReset && session.lastCloseKind != portSCloseTimeout) ||
+		session.openedAt.IsZero() ||
 		session.closedAt.Before(session.openedAt) {
 		return false
 	}
