@@ -9,6 +9,7 @@ import (
 
 	"github.com/iniwex5/vowifi-go/runtimehost"
 	"github.com/iniwex5/vowifi-go/runtimehost/messaging"
+	"github.com/yibaiba/hideck/internal/phonelookup"
 	"github.com/yibaiba/hideck/pkg/smscodec"
 )
 
@@ -83,7 +84,7 @@ func (p *Pool) SendRoutedSMS(
 		return routedSMSSendResult{}, errors.New("sms route: worker is nil")
 	}
 	deviceID := worker.ID
-	destination := strings.TrimSpace(phone)
+	destination := normalizeRoutedSMSDestination(phone, phoneNumberRegionForWorker(worker))
 	checkOwner := p.outboundOwnerCheck(worker)
 	identity, identityErr := p.ResolveSMSIdentity(deviceID)
 	if identityErr != nil {
@@ -138,6 +139,34 @@ func (p *Pool) SendRoutedSMS(
 	result.Identity = identity
 	result.IdentityRead = true
 	return result, err
+}
+
+// normalizeRoutedSMSDestination interprets a national number in the home
+// region of the selected SIM before both the VoWiFi and circuit-switched
+// send paths see it. Explicit international numbers, short codes, and SIP
+// destinations keep their existing meaning.
+func normalizeRoutedSMSDestination(raw, region string) string {
+	destination := strings.TrimSpace(raw)
+	if destination == "" || strings.HasPrefix(strings.ToLower(destination), "sip:") {
+		return destination
+	}
+	prefix := ""
+	phone := destination
+	if strings.HasPrefix(strings.ToLower(phone), "tel:") {
+		prefix = "tel:"
+		phone = strings.TrimSpace(phone[4:])
+	}
+	for index, character := range phone {
+		if character >= '0' && character <= '9' || character == '+' && index == 0 ||
+			strings.ContainsRune(" -()", character) {
+			continue
+		}
+		return destination
+	}
+	if normalized := phonelookup.NormalizeWithRegion(phone, region); normalized != "" {
+		return prefix + normalized
+	}
+	return destination
 }
 
 // AttachWorkerForTest registers a worker for tests in other packages.

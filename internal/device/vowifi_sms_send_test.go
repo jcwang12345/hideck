@@ -150,7 +150,7 @@ func TestShouldRouteSMSViaVoWiFiDuringConfiguredRecovery(t *testing.T) {
 	}
 }
 
-func TestSendRoutedSMSDoesNotGuessCountryCodeForEitherLeg(t *testing.T) {
+func TestSendRoutedSMSNormalizesNationalDestinationForBothLegs(t *testing.T) {
 	initDevicePhoneNumberTestDB(t)
 	pool := NewPool(&config.Config{})
 	defer pool.cancel()
@@ -167,11 +167,33 @@ func TestSendRoutedSMSDoesNotGuessCountryCodeForEitherLeg(t *testing.T) {
 		func(_, to, _ string) error { csTo = to; return nil },
 	)
 	result, err := pool.SendRoutedSMS(context.Background(), worker, "13123456789", "hello", smscodec.SubmitOptions{})
-	if err != nil || !result.FellBackToCS || result.Destination != "13123456789" {
+	if err != nil || !result.FellBackToCS || result.Destination != "+8613123456789" {
 		t.Fatalf("result=%+v err=%v", result, err)
 	}
 	if imsTo != result.Destination || csTo != result.Destination {
 		t.Fatalf("VoWiFi destination=%q, CS destination=%q", imsTo, csTo)
+	}
+}
+
+func TestNormalizeRoutedSMSDestinationUsesSIMHomeRegion(t *testing.T) {
+	tests := []struct {
+		name, input, region, want string
+	}{
+		{name: "US national", input: "9096754729", region: "US", want: "+19096754729"},
+		{name: "US country prefix", input: "1 (909) 675-4729", region: "US", want: "+19096754729"},
+		{name: "UK national", input: "07911 123456", region: "GB", want: "+447911123456"},
+		{name: "explicit international", input: "+8613123456789", region: "US", want: "+8613123456789"},
+		{name: "short code", input: "911", region: "US", want: "911"},
+		{name: "SIP destination", input: "sip:alice@example.net", region: "US", want: "sip:alice@example.net"},
+		{name: "TEL national", input: "tel:9096754729", region: "US", want: "tel:+19096754729"},
+		{name: "invalid destination", input: "909ABC4729", region: "US", want: "909ABC4729"},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			if got := normalizeRoutedSMSDestination(test.input, test.region); got != test.want {
+				t.Fatalf("normalizeRoutedSMSDestination(%q, %q)=%q want %q", test.input, test.region, got, test.want)
+			}
+		})
 	}
 }
 
