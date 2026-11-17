@@ -13,12 +13,13 @@ func TestCarrierPresetsAwaitPortSWithoutPriorReconnect(t *testing.T) {
 		for _, closeErr := range []error{io.EOF, syscall.ECONNRESET} {
 			t.Run(preset+"/"+closeErr.Error(), func(t *testing.T) {
 				service := newCarrierAwaitTestService(t, preset)
-				closeIdleTestPortS(t, service, closeErr, 20*time.Minute)
+				closeEstablishedTestPortS(t, service, closeErr, 20*time.Minute, false)
 				service.handleProtectedServerPushClosed()
 				timer := stopTestPortSWatch(service)
+				attAwait := preset == attCarrierPresetID || preset == lycaMobileATTCarrierPresetID
 				eofAwait := preset == globePHCarrierPresetID || preset == ditoPHCarrierPresetID || preset == twoDegreesNZCarrierPresetID
 				await := (eofAwait && closeErr == io.EOF) ||
-					(preset == oneNZCarrierPresetID && closeErr == syscall.ECONNRESET)
+					(preset == oneNZCarrierPresetID && closeErr == syscall.ECONNRESET) || attAwait
 				if (timer == nil) != await {
 					t.Fatalf("awaited peer reconnect = %t, want %t", timer == nil, await)
 				}
@@ -55,15 +56,15 @@ func TestATTIdlePortSResetAwaitsPeerReconnect(t *testing.T) {
 	}
 }
 
-func TestATTUnprovenPortSResetStillRecovers(t *testing.T) {
+func TestATTSetupTimePortSResetAwaitsPeerReconnect(t *testing.T) {
 	service := newCarrierAwaitTestService(t, attCarrierPresetID)
 	closeEstablishedTestPortS(t, service, syscall.ECONNRESET, 5*time.Second, true)
 	service.handleProtectedServerPushClosed()
-	if stopTestPortSWatch(service) == nil {
-		t.Fatal("setup-time AT&T reset awaited the peer instead of scheduling recovery")
+	if stopTestPortSWatch(service) != nil {
+		t.Fatal("setup-time AT&T reset scheduled REGISTER recovery")
 	}
-	if got := service.SMSReadiness(); got.Ready {
-		t.Fatalf("readiness = %+v, want reset recovery", got)
+	if got := service.SMSReadiness(); !got.Ready || !got.HealthReady || got.Reason != smsReadyReasonOnDemandPortS {
+		t.Fatalf("readiness = %+v, want healthy on-demand receive path", got)
 	}
 }
 
@@ -86,12 +87,12 @@ func TestATTEstablishedPortSTimeoutAwaitsPeerReconnect(t *testing.T) {
 	}
 }
 
-func TestATTSetupTimePortSTimeoutStillRecovers(t *testing.T) {
+func TestATTSetupTimePortSTimeoutAwaitsPeerReconnect(t *testing.T) {
 	service := newCarrierAwaitTestService(t, attCarrierPresetID)
 	closeEstablishedTestPortS(t, service, syscall.ETIMEDOUT, 5*time.Second, false)
 	service.handleProtectedServerPushClosed()
-	if stopTestPortSWatch(service) == nil {
-		t.Fatal("setup-time AT&T timeout awaited the peer instead of scheduling recovery")
+	if stopTestPortSWatch(service) != nil {
+		t.Fatal("setup-time AT&T timeout scheduled REGISTER recovery")
 	}
 }
 

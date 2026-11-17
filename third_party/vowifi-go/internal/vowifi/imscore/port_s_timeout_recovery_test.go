@@ -102,8 +102,6 @@ func TestFailedPortSTimeoutValidationStopsAwaitingPeer(t *testing.T) {
 func TestPortSTimeoutFailoverIsCarrierAndErrorScoped(t *testing.T) {
 	for _, preset := range []string{
 		vodafoneUKCarrierPresetID,
-		attCarrierPresetID,
-		lycaMobileATTCarrierPresetID,
 		"2degrees_nz", "ctexcel", "",
 	} {
 		for _, closeErr := range []error{syscall.ETIMEDOUT, io.EOF, os.ErrDeadlineExceeded, syscall.ECONNRESET} {
@@ -116,10 +114,8 @@ func TestPortSTimeoutFailoverIsCarrierAndErrorScoped(t *testing.T) {
 				s.completePortSRecovery(nil, true)
 				fireTestPortSWatch(t, s)
 				got := s.pendingPortSTimeoutFailover().registrar != ""
-				want := (preset == vodafoneUKCarrierPresetID &&
-					(closeErr == syscall.ETIMEDOUT || closeErr == syscall.ECONNRESET)) ||
-					((preset == attCarrierPresetID || preset == lycaMobileATTCarrierPresetID) &&
-						(closeErr == syscall.ETIMEDOUT || closeErr == syscall.ECONNRESET))
+				want := preset == vodafoneUKCarrierPresetID &&
+					(closeErr == syscall.ETIMEDOUT || closeErr == syscall.ECONNRESET)
 				if got != want {
 					t.Fatalf("timeout replacement pending = %t, want %t", got, want)
 				}
@@ -159,7 +155,7 @@ func TestATTShortIdlePortSResetKeepsOnDemandPolicyWithoutInboundSIP(t *testing.T
 	}
 }
 
-func TestATTSetupTimePortSResetStillUsesValidatedRecovery(t *testing.T) {
+func TestATTSetupTimePortSResetKeepsOnDemandPolicy(t *testing.T) {
 	s := newPortSTimeoutTestService(t)
 	s.cfg.CarrierPresetID = attCarrierPresetID
 	now := time.Now()
@@ -169,8 +165,27 @@ func TestATTSetupTimePortSResetStillUsesValidatedRecovery(t *testing.T) {
 	s.portSSession.lastCloseKind = portSClosePeerReset
 	policy, enabled := s.validatedPortSFailurePolicy(portSPeerResetFailure)
 	s.portSSessionMu.Unlock()
-	if !enabled || policy != "att_port_s_peer_reset" {
-		t.Fatalf("setup-time AT&T reset policy = %q enabled=%t, want validated recovery", policy, enabled)
+	if enabled || policy != "" {
+		t.Fatalf("setup-time AT&T reset policy = %q enabled=%t, want on-demand handling", policy, enabled)
+	}
+}
+
+func TestATTProtectedPortSFailuresNeverSelectPCSCFFailover(t *testing.T) {
+	for _, preset := range []string{attCarrierPresetID, lycaMobileATTCarrierPresetID} {
+		for _, closeErr := range []error{io.EOF, syscall.ECONNRESET, syscall.ETIMEDOUT} {
+			t.Run(preset+"/"+closeErr.Error(), func(t *testing.T) {
+				s := newPortSTimeoutTestService(t)
+				s.cfg.CarrierPresetID = preset
+				closeTestPortS(t, s, closeErr)
+				s.handleProtectedServerPushClosed()
+				if timer := stopTestPortSWatch(s); timer != nil {
+					t.Fatal("AT&T protected server flow close scheduled REGISTER recovery")
+				}
+				if pending := s.pendingPortSTimeoutFailover(); pending.registrar != "" {
+					t.Fatalf("AT&T protected server flow close selected P-CSCF failover: %+v", pending)
+				}
+			})
+		}
 	}
 }
 

@@ -297,10 +297,10 @@ func (s *Service) serveProtectedSIPConnection(conn net.Conn) {
 
 // handleProtectedServerPushClosed waits for the P-CSCF to reopen port-s and
 // falls back to a REGISTER refresh if it does not. A failed refresh is not
-// evidence of an on-demand flow. A later peer reconnect permits waiting after
-// clean EOF only; it does not establish reachability after transport errors.
-// A timeout on a listed carrier waits only after a successful REGISTER
-// (canAwaitPeerAfterTimeout).
+// evidence of an on-demand flow. Carrier policies may also identify a
+// standards-based server-initiated flow that the P-CSCF is expected to reopen
+// before its next request. A timeout on a listed carrier otherwise waits only
+// after a successful REGISTER (canAwaitPeerAfterTimeout).
 func (s *Service) handleProtectedServerPushClosed() {
 	if s == nil || s.stopped() {
 		return
@@ -488,11 +488,11 @@ func (s *Service) canAwaitOnDemandPortS() bool {
 		// 2degrees closes an idle port-s after about 2 minutes and has been
 		// seen reopening it for a later MT request.
 		return observed || preset == globePHCarrierPresetID || preset == ditoPHCarrierPresetID ||
-			preset == twoDegreesNZCarrierPresetID
+			preset == twoDegreesNZCarrierPresetID || attPortSClosureCanAwait(preset, session)
 	case portSClosePeerReset:
-		return preset == oneNZCarrierPresetID || attIdlePortSClosureCanAwait(preset, session)
+		return preset == oneNZCarrierPresetID || attPortSClosureCanAwait(preset, session)
 	case portSCloseTimeout:
-		return attIdlePortSClosureCanAwait(preset, session)
+		return attPortSClosureCanAwait(preset, session)
 	case portSCloseSARetired:
 		// The P-CSCF sends further requests to port_us over the new SAs,
 		// opening a new port-s flow (TS 24.229 5.2.2.2).
@@ -501,22 +501,25 @@ func (s *Service) canAwaitOnDemandPortS() bool {
 	return false
 }
 
-// AT&T's P-CSCF resets an otherwise healthy port-s after a short idle period.
-// The P-CSCF opening the protected flow proves that the downlink path was
-// reachable even when no SIP request arrived before the idle reset. Replaying
-// REGISTER immediately after that reset can stall the still-live registration
-// flow, so leave an established flow for the P-CSCF to reopen on demand. A
-// reset or timeout during initial setup still follows the normal recovery path.
-func attIdlePortSClosureCanAwait(preset string, session portSSessionSnapshot) bool {
+// AT&T does not negotiate SIP Outbound in its recovered profile, so its
+// protected TCP signaling uses the two connections described by TS 33.203
+// section 7.1. The P-CSCF opens port_pc -> port_us before sending a request;
+// keeping or reusing that server-initiated connection is not mandatory. Once
+// such a flow has been accepted, EOF, reset, and local transport timeout are
+// therefore not registration failures and must not trigger a REGISTER or
+// P-CSCF switch. The main registration flow and regular REGISTER expiry still
+// provide independent registration liveness.
+func attPortSClosureCanAwait(preset string, session portSSessionSnapshot) bool {
 	if preset != attCarrierPresetID && preset != lycaMobileATTCarrierPresetID {
 		return false
 	}
-	if (session.lastCloseKind != portSClosePeerReset && session.lastCloseKind != portSCloseTimeout) ||
+	if (session.lastCloseKind != portSCloseEOF && session.lastCloseKind != portSClosePeerReset &&
+		session.lastCloseKind != portSCloseTimeout) ||
 		session.openedAt.IsZero() ||
 		session.closedAt.Before(session.openedAt) {
 		return false
 	}
-	return session.closedAt.Sub(session.openedAt) >= attIdlePortSResetMinLifetime
+	return true
 }
 
 // A carrier preset only skips the REGISTER right after the close. Port-s
@@ -644,7 +647,6 @@ const (
 	lebaraUKCarrierPresetID      = "lebara_uk_23487"
 	attCarrierPresetID           = "att_310280"
 	lycaMobileATTCarrierPresetID = "LycaMobile_310410"
-	attIdlePortSResetMinLifetime = 30 * time.Second
 )
 
 func (s *Service) consumePortSReconnectWatch(generation uint64, registrar string) bool {

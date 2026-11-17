@@ -36,9 +36,9 @@ func (s *Service) recordPortSTimeoutLocked(registrar, kind string) {
 
 // validatedPortSFailurePolicy identifies carriers where a successful REGISTER
 // is not enough to preserve the current binding after port-s has failed. The
-// P-CSCF must also reopen the protected downlink during validation. An AT&T
-// flow that survived setup keeps its separate on-demand policy after either a
-// reset or timeout; only setup-time failures use validated recovery.
+// P-CSCF must also reopen the protected downlink during validation. AT&T's
+// accepted server-initiated TCP flow is on demand under TS 33.203 section 7.1,
+// so closing it never selects this REGISTER-and-failover policy.
 // The caller owns portSSessionMu.
 func (s *Service) validatedPortSFailurePolicy(failure string) (string, bool) {
 	if s == nil || failure == "" {
@@ -60,16 +60,9 @@ func (s *Service) validatedPortSFailurePolicy(failure string) (string, bool) {
 			lastInboundAt: s.portSSession.lastInboundAt,
 			lastCloseKind: s.portSSession.lastCloseKind,
 		}
-		switch failure {
-		case portSTransportTimeoutFailure:
-			if attIdlePortSClosureCanAwait(preset, session) {
-				return "", false
-			}
-			return "att_port_s_timeout", true
-		case portSPeerResetFailure:
-			if !attIdlePortSClosureCanAwait(preset, session) {
-				return "att_port_s_peer_reset", true
-			}
+		if (failure == portSTransportTimeoutFailure || failure == portSPeerResetFailure) &&
+			attPortSClosureCanAwait(preset, session) {
+			return "", false
 		}
 		return "", false
 	default:
