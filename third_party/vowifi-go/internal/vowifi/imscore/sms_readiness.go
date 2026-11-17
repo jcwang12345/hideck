@@ -18,6 +18,7 @@ const (
 	smsReadyReasonRegistrationFlow  = "IMS SMS receiver verified on registered TCP flow"
 	smsReadyReasonPortSAwaitingPeer = "IMS registered; port-s closed or timed out, awaiting the P-CSCF reconnect"
 	smsReadyReasonAwaitingPeerPortS = "IMS SMS receiver ready; port-s timed out, P-CSCF reconnects on demand"
+	smsReadyReasonOnDemandPortS     = "IMS SMS receiver ready; idle port-s closed, P-CSCF reconnects on demand"
 	smsReadyReasonProbingPortS      = "IMS SMS receiver ready; port-s timed out, REGISTER probing the P-CSCF"
 )
 
@@ -74,6 +75,8 @@ func (s *Service) SMSReadiness() SMSReadiness {
 		readiness.Reason = smsReadyReasonRegistrationFlow
 	} else if readiness.Ready && !s.portSPushReady.Load() && s.awaitingPeerAfterTimeout() {
 		readiness.Reason = smsReadyReasonAwaitingPeerPortS
+	} else if readiness.Ready && !s.portSPushReady.Load() && s.canAwaitOnDemandPortS() {
+		readiness.Reason = smsReadyReasonOnDemandPortS
 	} else if readiness.Ready && probeGrace {
 		readiness.Reason = smsReadyReasonProbingPortS
 	}

@@ -482,20 +482,36 @@ func (s *Service) canAwaitOnDemandPortS() bool {
 		preset = strings.TrimSpace(s.cfg.CarrierPresetID)
 	}
 	observed := s.portSOnDemandObserved.Load()
-	switch s.capturePortSSession().lastCloseKind {
+	session := s.capturePortSSession()
+	switch session.lastCloseKind {
 	case portSCloseEOF:
 		// 2degrees closes an idle port-s after about 2 minutes and has been
 		// seen reopening it for a later MT request.
 		return observed || preset == globePHCarrierPresetID || preset == ditoPHCarrierPresetID ||
 			preset == twoDegreesNZCarrierPresetID
 	case portSClosePeerReset:
-		return preset == oneNZCarrierPresetID
+		return preset == oneNZCarrierPresetID || attIdlePortSResetCanAwait(preset, session)
 	case portSCloseSARetired:
 		// The P-CSCF sends further requests to port_us over the new SAs,
 		// opening a new port-s flow (TS 24.229 5.2.2.2).
 		return true
 	}
 	return false
+}
+
+// AT&T's P-CSCF resets an otherwise healthy port-s after a long idle period.
+// A short-lived reset still indicates a broken receive path and keeps the
+// normal REGISTER recovery. Only an established flow that received traffic is
+// safe to leave for the P-CSCF to reopen before its next downlink request.
+func attIdlePortSResetCanAwait(preset string, session portSSessionSnapshot) bool {
+	if preset != attCarrierPresetID && preset != lycaMobileATTCarrierPresetID {
+		return false
+	}
+	if session.lastCloseKind != portSClosePeerReset || session.openedAt.IsZero() ||
+		session.closedAt.Before(session.openedAt) || session.lastInboundAt.Before(session.openedAt) {
+		return false
+	}
+	return session.closedAt.Sub(session.openedAt) >= attIdlePortSResetMinLifetime
 }
 
 // A carrier preset only skips the REGISTER right after the close. Port-s
@@ -616,11 +632,14 @@ func portSClosedFor(session portSSessionSnapshot) time.Duration {
 }
 
 const (
-	oneNZCarrierPresetID        = "one_nz_53001"
-	globePHCarrierPresetID      = "globe_ph_51502"
-	ditoPHCarrierPresetID       = "dito_51566"
-	twoDegreesNZCarrierPresetID = "2degrees_nz_53024"
-	lebaraUKCarrierPresetID     = "lebara_uk_23487"
+	oneNZCarrierPresetID         = "one_nz_53001"
+	globePHCarrierPresetID       = "globe_ph_51502"
+	ditoPHCarrierPresetID        = "dito_51566"
+	twoDegreesNZCarrierPresetID  = "2degrees_nz_53024"
+	lebaraUKCarrierPresetID      = "lebara_uk_23487"
+	attCarrierPresetID           = "att_310280"
+	lycaMobileATTCarrierPresetID = "LycaMobile_310410"
+	attIdlePortSResetMinLifetime = 30 * time.Minute
 )
 
 func (s *Service) consumePortSReconnectWatch(generation uint64, registrar string) bool {
