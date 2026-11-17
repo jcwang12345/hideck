@@ -100,7 +100,12 @@ func TestFailedPortSTimeoutValidationStopsAwaitingPeer(t *testing.T) {
 }
 
 func TestPortSTimeoutFailoverIsCarrierAndErrorScoped(t *testing.T) {
-	for _, preset := range []string{vodafoneUKCarrierPresetID, "2degrees_nz", "ctexcel", ""} {
+	for _, preset := range []string{
+		vodafoneUKCarrierPresetID,
+		attCarrierPresetID,
+		lycaMobileATTCarrierPresetID,
+		"2degrees_nz", "ctexcel", "",
+	} {
 		for _, closeErr := range []error{syscall.ETIMEDOUT, io.EOF, os.ErrDeadlineExceeded, syscall.ECONNRESET} {
 			t.Run(preset+"/"+closeErr.Error(), func(t *testing.T) {
 				s := newPortSTimeoutTestService(t)
@@ -111,8 +116,10 @@ func TestPortSTimeoutFailoverIsCarrierAndErrorScoped(t *testing.T) {
 				s.completePortSRecovery(nil, true)
 				fireTestPortSWatch(t, s)
 				got := s.pendingPortSTimeoutFailover().registrar != ""
-				want := preset == vodafoneUKCarrierPresetID &&
-					(closeErr == syscall.ETIMEDOUT || closeErr == syscall.ECONNRESET)
+				want := (preset == vodafoneUKCarrierPresetID &&
+					(closeErr == syscall.ETIMEDOUT || closeErr == syscall.ECONNRESET)) ||
+					((preset == attCarrierPresetID || preset == lycaMobileATTCarrierPresetID) &&
+						closeErr == syscall.ETIMEDOUT)
 				if got != want {
 					t.Fatalf("timeout replacement pending = %t, want %t", got, want)
 				}

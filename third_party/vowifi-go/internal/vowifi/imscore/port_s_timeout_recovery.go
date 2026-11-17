@@ -17,6 +17,7 @@ type portSTimeoutRecoveryState struct {
 	generation       uint64
 	observedAt       time.Time
 	failure          string
+	policyName       string
 	validationFailed bool
 	downlinkProven   bool
 }
@@ -24,11 +25,35 @@ type portSTimeoutRecoveryState struct {
 func (s *Service) recordPortSTimeoutLocked(registrar, kind string) {
 	s.portSSession.timeoutRecovery = portSTimeoutRecoveryState{}
 	failure := portSValidationFailure(kind)
-	if failure != "" && usesVodafoneUKPortSResetRecovery(s.cfg) {
+	policyName, enabled := s.validatedPortSFailurePolicy(failure)
+	if enabled {
 		s.portSSession.timeoutRecovery = portSTimeoutRecoveryState{
 			registrar: registrar, generation: s.portSSession.generation,
-			observedAt: s.portSSession.closedAt, failure: failure,
+			observedAt: s.portSSession.closedAt, failure: failure, policyName: policyName,
 		}
+	}
+}
+
+// validatedPortSFailurePolicy identifies carriers where a successful REGISTER
+// is not enough to preserve the current binding after port-s has failed. The
+// P-CSCF must also reopen the protected downlink during validation. AT&T is
+// scoped to transport timeouts: its long-idle peer resets have a separate
+// on-demand reconnect policy in register_transport.go.
+func (s *Service) validatedPortSFailurePolicy(failure string) (string, bool) {
+	if s == nil || failure == "" {
+		return "", false
+	}
+	if usesVodafoneUKPortSResetRecovery(s.cfg) {
+		return "", true
+	}
+	if failure != portSTransportTimeoutFailure || s.cfg == nil {
+		return "", false
+	}
+	switch strings.TrimSpace(s.cfg.CarrierPresetID) {
+	case attCarrierPresetID, lycaMobileATTCarrierPresetID:
+		return "att_port_s_timeout", true
+	default:
+		return "", false
 	}
 }
 
@@ -79,7 +104,7 @@ func (s *Service) recoverTimedOutPortSLocked() bool {
 		failure = portSTransportTimeoutFailure
 	}
 	s.recoverPCSCFAfterPortSFailureLocked(state.registrar, portSFailoverCause{
-		reason: failure, observedAt: state.observedAt,
+		reason: failure, policyName: state.policyName, observedAt: state.observedAt,
 		generation: state.generation,
 	})
 	return true

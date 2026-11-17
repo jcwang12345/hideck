@@ -11,12 +11,16 @@ import (
 
 type portSFailoverCause struct {
 	reason             string
+	policyName         string
 	generation         uint64
 	observedAt         time.Time
 	deprioritizedUntil time.Time
 }
 
 func (cause portSFailoverCause) policy() string {
+	if policy := strings.TrimSpace(cause.policyName); policy != "" {
+		return policy
+	}
 	switch cause.reason {
 	case "downlink_validation_timeout":
 		return "vodafone_uk_downlink_validation"
