@@ -32,41 +32,38 @@ func TestCarrierPresetsAwaitPortSWithoutPriorReconnect(t *testing.T) {
 
 func TestATTIdlePortSResetAwaitsPeerReconnect(t *testing.T) {
 	for _, preset := range []string{attCarrierPresetID, lycaMobileATTCarrierPresetID} {
-		t.Run(preset, func(t *testing.T) {
-			service := newCarrierAwaitTestService(t, preset)
-			closeEstablishedTestPortS(t, service, syscall.ECONNRESET, 45*time.Minute, true)
-			service.handleProtectedServerPushClosed()
-			if stopTestPortSWatch(service) != nil {
-				t.Fatal("AT&T idle reset scheduled a REGISTER instead of awaiting the peer")
-			}
-			if got := service.SMSReadiness(); !got.Ready || !got.HealthReady || got.Reason != smsReadyReasonOnDemandPortS {
-				t.Fatalf("readiness = %+v, want healthy on-demand receive path", got)
-			}
-		})
+		for _, tc := range []struct {
+			name     string
+			lifetime time.Duration
+			inbound  bool
+		}{
+			{name: "long-with-inbound", lifetime: 45 * time.Minute, inbound: true},
+			{name: "short-idle-without-inbound", lifetime: 45 * time.Second, inbound: false},
+		} {
+			t.Run(preset+"/"+tc.name, func(t *testing.T) {
+				service := newCarrierAwaitTestService(t, preset)
+				closeEstablishedTestPortS(t, service, syscall.ECONNRESET, tc.lifetime, tc.inbound)
+				service.handleProtectedServerPushClosed()
+				if stopTestPortSWatch(service) != nil {
+					t.Fatal("AT&T idle reset scheduled a REGISTER instead of awaiting the peer")
+				}
+				if got := service.SMSReadiness(); !got.Ready || !got.HealthReady || got.Reason != smsReadyReasonOnDemandPortS {
+					t.Fatalf("readiness = %+v, want healthy on-demand receive path", got)
+				}
+			})
+		}
 	}
 }
 
 func TestATTUnprovenPortSResetStillRecovers(t *testing.T) {
-	tests := []struct {
-		name     string
-		lifetime time.Duration
-		inbound  bool
-	}{
-		{name: "short-lived", lifetime: 5 * time.Minute, inbound: true},
-		{name: "no-inbound-evidence", lifetime: 45 * time.Minute, inbound: false},
+	service := newCarrierAwaitTestService(t, attCarrierPresetID)
+	closeEstablishedTestPortS(t, service, syscall.ECONNRESET, 5*time.Second, true)
+	service.handleProtectedServerPushClosed()
+	if stopTestPortSWatch(service) == nil {
+		t.Fatal("setup-time AT&T reset awaited the peer instead of scheduling recovery")
 	}
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			service := newCarrierAwaitTestService(t, attCarrierPresetID)
-			closeEstablishedTestPortS(t, service, syscall.ECONNRESET, tc.lifetime, tc.inbound)
-			service.handleProtectedServerPushClosed()
-			if stopTestPortSWatch(service) == nil {
-				t.Fatal("unproven AT&T reset awaited the peer instead of scheduling recovery")
-			}
-			if got := service.SMSReadiness(); got.Ready {
-				t.Fatalf("readiness = %+v, want reset recovery", got)
-			}
-		})
+	if got := service.SMSReadiness(); got.Ready {
+		t.Fatalf("readiness = %+v, want reset recovery", got)
 	}
 }
 

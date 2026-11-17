@@ -144,6 +144,36 @@ func TestATTLongIdlePortSResetKeepsOnDemandPolicy(t *testing.T) {
 	}
 }
 
+func TestATTShortIdlePortSResetKeepsOnDemandPolicyWithoutInboundSIP(t *testing.T) {
+	s := newPortSTimeoutTestService(t)
+	s.cfg.CarrierPresetID = attCarrierPresetID
+	now := time.Now()
+	s.portSSessionMu.Lock()
+	s.portSSession.openedAt = now.Add(-45 * time.Second)
+	s.portSSession.closedAt = now
+	s.portSSession.lastCloseKind = portSClosePeerReset
+	policy, enabled := s.validatedPortSFailurePolicy(portSPeerResetFailure)
+	s.portSSessionMu.Unlock()
+	if enabled || policy != "" {
+		t.Fatalf("short-idle AT&T reset policy = %q enabled=%t, want on-demand handling", policy, enabled)
+	}
+}
+
+func TestATTSetupTimePortSResetStillUsesValidatedRecovery(t *testing.T) {
+	s := newPortSTimeoutTestService(t)
+	s.cfg.CarrierPresetID = attCarrierPresetID
+	now := time.Now()
+	s.portSSessionMu.Lock()
+	s.portSSession.openedAt = now.Add(-5 * time.Second)
+	s.portSSession.closedAt = now
+	s.portSSession.lastCloseKind = portSClosePeerReset
+	policy, enabled := s.validatedPortSFailurePolicy(portSPeerResetFailure)
+	s.portSSessionMu.Unlock()
+	if !enabled || policy != "att_port_s_peer_reset" {
+		t.Fatalf("setup-time AT&T reset policy = %q enabled=%t, want validated recovery", policy, enabled)
+	}
+}
+
 func TestVodafoneUKPeerResetWithoutReopenedDownlinkRequestsFreshPath(t *testing.T) {
 	s := newPortSTimeoutTestService(t)
 	closeTestPortS(t, s, syscall.ECONNRESET)

@@ -499,16 +499,18 @@ func (s *Service) canAwaitOnDemandPortS() bool {
 	return false
 }
 
-// AT&T's P-CSCF resets an otherwise healthy port-s after a long idle period.
-// A short-lived reset still indicates a broken receive path and keeps the
-// normal REGISTER recovery. Only an established flow that received traffic is
-// safe to leave for the P-CSCF to reopen before its next downlink request.
+// AT&T's P-CSCF resets an otherwise healthy port-s after a short idle period.
+// The P-CSCF opening the protected flow proves that the downlink path was
+// reachable even when no SIP request arrived before the idle reset. Replaying
+// REGISTER immediately after that reset can stall the still-live registration
+// flow, so leave an established flow for the P-CSCF to reopen on demand. A
+// reset during initial setup still follows the normal recovery path.
 func attIdlePortSResetCanAwait(preset string, session portSSessionSnapshot) bool {
 	if preset != attCarrierPresetID && preset != lycaMobileATTCarrierPresetID {
 		return false
 	}
 	if session.lastCloseKind != portSClosePeerReset || session.openedAt.IsZero() ||
-		session.closedAt.Before(session.openedAt) || session.lastInboundAt.Before(session.openedAt) {
+		session.closedAt.Before(session.openedAt) {
 		return false
 	}
 	return session.closedAt.Sub(session.openedAt) >= attIdlePortSResetMinLifetime
@@ -639,7 +641,7 @@ const (
 	lebaraUKCarrierPresetID      = "lebara_uk_23487"
 	attCarrierPresetID           = "att_310280"
 	lycaMobileATTCarrierPresetID = "LycaMobile_310410"
-	attIdlePortSResetMinLifetime = 30 * time.Minute
+	attIdlePortSResetMinLifetime = 30 * time.Second
 )
 
 func (s *Service) consumePortSReconnectWatch(generation uint64, registrar string) bool {
