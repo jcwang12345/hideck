@@ -119,12 +119,28 @@ func TestPortSTimeoutFailoverIsCarrierAndErrorScoped(t *testing.T) {
 				want := (preset == vodafoneUKCarrierPresetID &&
 					(closeErr == syscall.ETIMEDOUT || closeErr == syscall.ECONNRESET)) ||
 					((preset == attCarrierPresetID || preset == lycaMobileATTCarrierPresetID) &&
-						closeErr == syscall.ETIMEDOUT)
+						(closeErr == syscall.ETIMEDOUT || closeErr == syscall.ECONNRESET))
 				if got != want {
 					t.Fatalf("timeout replacement pending = %t, want %t", got, want)
 				}
 			})
 		}
+	}
+}
+
+func TestATTLongIdlePortSResetKeepsOnDemandPolicy(t *testing.T) {
+	s := newPortSTimeoutTestService(t)
+	s.cfg.CarrierPresetID = attCarrierPresetID
+	now := time.Now()
+	s.portSSessionMu.Lock()
+	s.portSSession.openedAt = now.Add(-31 * time.Minute)
+	s.portSSession.closedAt = now
+	s.portSSession.lastInboundAt = now.Add(-30 * time.Minute)
+	s.portSSession.lastCloseKind = portSClosePeerReset
+	policy, enabled := s.validatedPortSFailurePolicy(portSPeerResetFailure)
+	s.portSSessionMu.Unlock()
+	if enabled || policy != "" {
+		t.Fatalf("long-idle AT&T reset policy = %q enabled=%t, want on-demand handling", policy, enabled)
 	}
 }
 

@@ -36,9 +36,10 @@ func (s *Service) recordPortSTimeoutLocked(registrar, kind string) {
 
 // validatedPortSFailurePolicy identifies carriers where a successful REGISTER
 // is not enough to preserve the current binding after port-s has failed. The
-// P-CSCF must also reopen the protected downlink during validation. AT&T is
-// scoped to transport timeouts: its long-idle peer resets have a separate
-// on-demand reconnect policy in register_transport.go.
+// P-CSCF must also reopen the protected downlink during validation. AT&T's
+// proven long-idle reset keeps its separate on-demand policy; a short reset is
+// a broken receive path and follows the same validated recovery as a timeout.
+// The caller owns portSSessionMu.
 func (s *Service) validatedPortSFailurePolicy(failure string) (string, bool) {
 	if s == nil || failure == "" {
 		return "", false
@@ -46,12 +47,28 @@ func (s *Service) validatedPortSFailurePolicy(failure string) (string, bool) {
 	if usesVodafoneUKPortSResetRecovery(s.cfg) {
 		return "", true
 	}
-	if failure != portSTransportTimeoutFailure || s.cfg == nil {
+	if s.cfg == nil {
 		return "", false
 	}
-	switch strings.TrimSpace(s.cfg.CarrierPresetID) {
+	preset := strings.TrimSpace(s.cfg.CarrierPresetID)
+	switch preset {
 	case attCarrierPresetID, lycaMobileATTCarrierPresetID:
-		return "att_port_s_timeout", true
+		switch failure {
+		case portSTransportTimeoutFailure:
+			return "att_port_s_timeout", true
+		case portSPeerResetFailure:
+			session := portSSessionSnapshot{
+				generation:    s.portSSession.generation,
+				openedAt:      s.portSSession.openedAt,
+				closedAt:      s.portSSession.closedAt,
+				lastInboundAt: s.portSSession.lastInboundAt,
+				lastCloseKind: s.portSSession.lastCloseKind,
+			}
+			if !attIdlePortSResetCanAwait(preset, session) {
+				return "att_port_s_peer_reset", true
+			}
+		}
+		return "", false
 	default:
 		return "", false
 	}
