@@ -4,7 +4,7 @@ PKG_NAME:=hideck
 HIDECK_VERSION?=2.1.23
 HIDECK_PACKAGE_VERSION?=$(HIDECK_VERSION)
 PKG_VERSION:=$(HIDECK_PACKAGE_VERSION)
-PKG_RELEASE:=2
+PKG_RELEASE:=3
 
 PKG_LICENSE:=SEE LICENSE
 PKG_MAINTAINER:=yibaiba <https://github.com/yibaiba/hideck>
@@ -21,7 +21,7 @@ ifneq ($(DUMP),1)
 endif
 endif
 
-PKG_SOURCE:=hideck_v$(HIDECK_VERSION)_openwrt_$(HIDECK_BINARCH)
+PKG_SOURCE:=hideck_v$(HIDECK_VERSION)_openwrt_dynamic_$(HIDECK_BINARCH)
 PKG_SOURCE_URL:=https://github.com/yibaiba/hideck/releases/download/v$(HIDECK_VERSION)
 # Supplied by build-packages.sh from the verified local release artifact.
 PKG_HASH:=$(HIDECK_BINARY_SHA256)
@@ -33,12 +33,12 @@ define Package/hideck
   CATEGORY:=Network
   TITLE:=HiDeck modem management
   URL:=https://github.com/yibaiba/hideck
-  DEPENDS:=+libqmi +kmod-usb-net-qmi-wwan +kmod-usb-serial-option
+  DEPENDS:=+libgcc +lame-lib +libqmi +kmod-usb-net-qmi-wwan +kmod-usb-serial-option
 endef
 
 define Package/hideck/description
-  Prebuilt musl-static HiDeck for OpenWrt. Do not use the UPX GitHub
-  linux_* binaries; those need glibc.
+  Prebuilt dynamic-musl HiDeck for OpenWrt with native MP3 call recording.
+  Do not use the UPX GitHub linux_* binaries; those need glibc.
 endef
 
 define Package/hideck/conffiles

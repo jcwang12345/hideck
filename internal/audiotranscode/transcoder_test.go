@@ -77,6 +77,25 @@ func fakeLameAPI() *lameAPI {
 	}
 }
 
+func TestCheckMP3Encoder(t *testing.T) {
+	transcoder := New()
+	transcoder.lame = fakeLameAPI()
+	transcoder.lameOnce.Do(func() {})
+	if err := transcoder.CheckMP3Encoder(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestCheckMP3EncoderRejectsEncodeFailure(t *testing.T) {
+	transcoder := New()
+	transcoder.lame = fakeLameAPI()
+	transcoder.lame.encodeBuffer = func(uintptr, []int16, []int16, int, []byte, int) int { return -3 }
+	transcoder.lameOnce.Do(func() {})
+	if err := transcoder.CheckMP3Encoder(); err == nil || !strings.Contains(err.Error(), "code -3") {
+		t.Fatalf("error=%v", err)
+	}
+}
+
 func TestDecodePCM16WAVRejectsUnsupportedInput(t *testing.T) {
 	_, _, err := decodePCM16WAV([]byte("not a wave file"))
 	if err == nil || !strings.Contains(err.Error(), "header") {

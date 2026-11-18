@@ -66,6 +66,51 @@ type Transcoder struct {
 // New creates a lazy-loading system MP3 transcoder.
 func New() *Transcoder { return &Transcoder{} }
 
+// CheckMP3Encoder loads the system LAME library and performs an in-memory
+// encode. Deployers use this before activating a binary so a static musl build
+// or a missing runtime library cannot silently disable call recordings.
+func (t *Transcoder) CheckMP3Encoder() error {
+	if t == nil {
+		return errors.New("audio transcoder is unavailable")
+	}
+	t.lameOnce.Do(func() { t.lame, t.lameErr = loadNativeLame() })
+	if t.lameErr != nil {
+		return t.lameErr
+	}
+	if t.lame == nil {
+		return errors.New("MP3 encoder is unavailable")
+	}
+	encoder := t.lame.init()
+	if encoder == 0 {
+		return errors.New("initialize MP3 encoder")
+	}
+	defer t.lame.close(encoder)
+	if err := t.lame.configure(encoder, 16000, mp3BitrateWB); err != nil {
+		return err
+	}
+
+	pcm := make([]int16, 16000)
+	buffer := make([]byte, mp3SamplesPerChunk*5/4+mp3BufferPadding)
+	writtenTotal := 0
+	for offset := 0; offset < len(pcm); offset += mp3SamplesPerChunk {
+		end := min(offset+mp3SamplesPerChunk, len(pcm))
+		written := t.lame.encode(encoder, pcm[offset:end], buffer)
+		if written < 0 {
+			return fmt.Errorf("MP3 encoder self-check failed with code %d", written)
+		}
+		writtenTotal += written
+	}
+	written := t.lame.flush(encoder, buffer)
+	if written < 0 {
+		return fmt.Errorf("MP3 encoder self-check flush failed with code %d", written)
+	}
+	writtenTotal += written
+	if writtenTotal == 0 {
+		return errors.New("MP3 encoder self-check produced no audio")
+	}
+	return nil
+}
+
 // ToMP3 decodes the recorded AMR/WAV source and atomically publishes an MP3 file.
 func (t *Transcoder) ToMP3(ctx context.Context, inputPath string) (string, error) {
 	if t == nil {

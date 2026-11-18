@@ -280,7 +280,11 @@ install_openwrt_service() {
   init_source=$1
   if maybe_sudo install -m 755 "$init_source" /etc/init.d/hideck; then
     maybe_sudo /etc/init.d/hideck enable || true
-    maybe_sudo /etc/init.d/hideck start || true
+    if maybe_sudo /etc/init.d/hideck running; then
+      maybe_sudo /etc/init.d/hideck restart
+    else
+      maybe_sudo /etc/init.d/hideck start
+    fi
     printf '已安装并启动 procd 服务：/etc/init.d/hideck\n'
     return
   fi
@@ -301,13 +305,40 @@ install_openwrt_packages() {
   fi
   openwrt_dependencies_failed=0
   install_packages "$openwrt_installer" \
-    libqmi kmod-usb-net-qmi-wwan kmod-usb-serial-option \
+    libgcc libqmi kmod-usb-net-qmi-wwan kmod-usb-serial-option \
     lame-lib libopencore-amrnb libopencore-amrwb libvo-amrwbenc || openwrt_dependencies_failed=1
   if modem_voice_requested; then
     printf 'OpenWrt 模组直拨需要配套 hideck-adb 安装包；官方旧版 adb 不会替代它。\n'
     install_packages "$openwrt_installer" hideck-adb alsa-utils kmod-usb-audio || openwrt_dependencies_failed=1
   fi
   return "$openwrt_dependencies_failed"
+}
+
+verify_openwrt_recording_candidate() {
+  candidate=$1
+  if ! check_output=$("$candidate" -check-mp3-encoder 2>&1); then
+    printf 'OpenWrt 候选程序未通过 MP3 录音自检，保留现有 HiDeck：\n%s\n' "$check_output" >&2
+    printf '请确认下载的是 openwrt_dynamic 产物，并已安装 libgcc、lame-lib。\n' >&2
+    return 1
+  fi
+  printf 'OpenWrt MP3 录音自检通过：%s\n' "$check_output"
+}
+
+install_binary_atomically() {
+  source_binary=$1
+  destination_binary=$2
+  destination_dir=$(dirname -- "$destination_binary")
+  temporary_binary="$destination_dir/.hideck.new.$$"
+
+  if ! install -m 755 "$source_binary" "$temporary_binary" 2>/dev/null; then
+    maybe_sudo install -m 755 "$source_binary" "$temporary_binary"
+  fi
+  if ! mv "$temporary_binary" "$destination_binary" 2>/dev/null; then
+    if ! maybe_sudo mv "$temporary_binary" "$destination_binary"; then
+      maybe_sudo rm -f "$temporary_binary" || true
+      return 1
+    fi
+  fi
 }
 
 write_systemd_unit() {
@@ -509,7 +540,17 @@ require_command uname
 
 ARCH=$(detect_arch)
 VERSION=$(resolve_version)
-ASSET_NAME="hideck_${VERSION}_${ARCH}"
+ASSET_ARCH=$ARCH
+if is_openwrt; then
+  case "$ARCH" in
+    openwrt_*) ASSET_ARCH="openwrt_dynamic_${ARCH#openwrt_}" ;;
+    *)
+      printf 'OpenWrt 只能安装 openwrt_* 架构产物，当前选择：%s\n' "$ARCH" >&2
+      exit 1
+      ;;
+  esac
+fi
+ASSET_NAME="hideck_${VERSION}_${ASSET_ARCH}"
 
 if is_openwrt && [ -z "${HIDECK_DIR:-}" ]; then
   PROJECT_DIR=/var/lib/hideck
@@ -534,7 +575,7 @@ ASSET_URL="${RELEASES_DOWNLOAD_URL}/${VERSION}/${ASSET_NAME}"
 SUMS_URL="${RELEASES_DOWNLOAD_URL}/${VERSION}/SHA256SUMS"
 SIDECAR_URL="${RELEASES_DOWNLOAD_URL}/${VERSION}/${ASSET_NAME}.sha256"
 
-printf '部署目录：%s\n版本：%s\n架构：%s\n' "$PROJECT_DIR" "$VERSION" "$ARCH"
+printf '部署目录：%s\n版本：%s\n架构：%s\n发布产物：%s\n' "$PROJECT_DIR" "$VERSION" "$ARCH" "$ASSET_NAME"
 
 mkdir -p "$PROJECT_DIR/data" "$PROJECT_DIR/logs" 2>/dev/null || maybe_sudo mkdir -p "$PROJECT_DIR/data" "$PROJECT_DIR/logs"
 mkdir -p "$CONFIG_DIR" 2>/dev/null || maybe_sudo mkdir -p "$CONFIG_DIR"
@@ -571,15 +612,17 @@ if ! try_download_file "$SUMS_URL" "$DOWNLOAD_DIR/SHA256SUMS" 644; then
 fi
 verify_checksum "$DOWNLOAD_DIR/SHA256SUMS" "$DOWNLOAD_DIR/${ASSET_NAME}.sha256" "$ASSET_NAME" "$DOWNLOAD_DIR/$ASSET_NAME"
 
-if ! install -m 755 "$DOWNLOAD_DIR/$ASSET_NAME" "$BINARY_PATH" 2>/dev/null; then
-  maybe_sudo install -m 755 "$DOWNLOAD_DIR/$ASSET_NAME" "$BINARY_PATH"
-fi
-printf '已安装二进制：%s\n' "$BINARY_PATH"
 dependency_status=0
 if ! install_runtime_dependencies; then
   dependency_status=1
-  printf '依赖检查未通过，继续安装 HiDeck 服务；这不表示模组直拨或录音已可用。\n' >&2
+  printf '部分可选依赖未装全；继续执行上线前的 MP3 录音自检。\n' >&2
 fi
+if is_openwrt && ! verify_openwrt_recording_candidate "$DOWNLOAD_DIR/$ASSET_NAME"; then
+  exit 1
+fi
+
+install_binary_atomically "$DOWNLOAD_DIR/$ASSET_NAME" "$BINARY_PATH"
+printf '已安装二进制：%s\n' "$BINARY_PATH"
 
 if is_openwrt; then
   write_procd_init "$INIT_FILE" "$BINARY_PATH" "$CONFIG_FILE" "$PROJECT_DIR"

@@ -44,9 +44,18 @@ func main() {
 	// Parse flags
 	var configPath string
 	var backendOnly bool
+	var checkMP3Encoder bool
 	flag.StringVar(&configPath, "c", "config/config.yaml", "config file path")
 	flag.BoolVar(&backendOnly, "backend-only", false, "run as backend-only (disable embedded web UI)")
+	flag.BoolVar(&checkMP3Encoder, "check-mp3-encoder", false, "verify the native MP3 recording encoder and exit")
 	flag.Parse()
+	if checkMP3Encoder {
+		if err := audiotranscode.New().CheckMP3Encoder(); err != nil {
+			log.Fatalf("MP3 encoder check failed: %v", err)
+		}
+		log.Print("MP3 encoder check passed")
+		return
+	}
 
 	// 1. 加载配置
 	if err := config.InitGlobalManager(configPath); err != nil {

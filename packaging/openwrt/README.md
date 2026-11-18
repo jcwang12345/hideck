@@ -1,6 +1,6 @@
 # OpenWrt 安装与打包
 
-OpenWrt 必须使用 musl 构建、无 UPX 的程序，不能使用依赖 glibc 的 `linux_*`。Release 同时发布静态 `hideck_*_openwrt_*` 和动态 `hideck_*_openwrt_dynamic_*` 二进制；IPK/APK 安装包和二进制安装脚本继续使用静态版本。需要通话 MP3 编码时，按下文要求使用动态版本。程序及语音资源体积较大，小闪存设备需要 extroot；不提供 MIPS 包。
+OpenWrt 必须使用 musl 构建、无 UPX 的程序，不能使用依赖 glibc 的 `linux_*`。Release 同时发布静态 `hideck_*_openwrt_*` 和动态 `hideck_*_openwrt_dynamic_*` 二进制；IPK/APK 安装包和二进制安装脚本使用动态版本，并依赖 `libgcc`、`lame-lib` 保证通话 MP3 编码可用。程序及语音资源体积较大，小闪存设备需要 extroot；不提供 MIPS 包。
 
 ## 三个独立安装包
 
@@ -77,7 +77,7 @@ opkg update && opkg install curl  # APK 系统：apk update && apk add curl
 curl -fsSL https://raw.githubusercontent.com/yibaiba/hideck/main/deploy-binary.sh | sh
 ```
 
-脚本自动选用 musl 静态二进制，默认安装 QMI、USB 串口和录音依赖，**OpenWrt 默认不安装模组直拨依赖**。若使用二进制脚本且需要直拨，先从匹配的包集合单独安装 `hideck-adb`，再运行：
+脚本自动选用动态 musl 二进制，先安装 QMI、USB 串口和录音依赖，再用候选程序实际执行一次内存 MP3 编码。只有自检通过才会原子替换现有程序；失败时保留正在使用的版本。**OpenWrt 默认不安装模组直拨依赖**。若使用二进制脚本且需要直拨，先从匹配的包集合单独安装 `hideck-adb`，再运行：
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/yibaiba/hideck/main/deploy-binary.sh | HIDECK_MODEM_VOICE=1 sh
@@ -96,8 +96,8 @@ curl -fsSL https://raw.githubusercontent.com/yibaiba/hideck/main/deploy-binary.s
 HiDeck 使用动态加载的编码库生成 MP3。静态 musl 程序调用 `dlopen` 会报
 `Dynamic loading not supported`；仅安装 `lame-lib` 不能解决这一问题。
 Release 自动提供 `hideck_<版本>_openwrt_dynamic_<架构>` 及其 SHA256 文件。
-它保留动态加载能力，但不会被 IPK/APK 打包流程或 `deploy-binary.sh` 自动选择，
-避免给不需要录音的设备增加运行库要求。设备需安装 `libgcc` 和 `lame-lib`
+它保留动态加载能力，并由 IPK/APK 打包流程及 `deploy-binary.sh` 自动选择。
+设备需安装 `libgcc` 和 `lame-lib`
 （使用 `opkg install` 或 `apk add`），并核对 Release 中的 SHA256SUMS。发布流程
 使用 [sdk-matrix.json](sdk-matrix.json) 固定的 OpenWrt 24.10 SDK 构建三个架构，
 不使用只能生成 static PIE 的通用 ARM 交叉工具链冒充动态产物。
@@ -156,7 +156,7 @@ PCMU 模组直拨的 MP3 编码已验证；AMR 实时编解码仍需对应库。
 
 ## 本地 SDK 构建
 
-需要 Docker（SDK 构建主机为 Linux x86_64）和已经构建好的对应架构 musl 静态 HiDeck。先构建前端，再用 [build.sh](build.sh) 构建二进制；不能用普通 `CGO_ENABLED=0 go build` 代替静态链接流程。
+需要 Docker（SDK 构建主机为 Linux x86_64）和已经构建好的对应架构动态 musl HiDeck。先构建前端，再用 [build.sh](build.sh) 构建二进制；不能用普通 `CGO_ENABLED=0 go build` 代替 OpenWrt SDK 动态链接流程。
 
 以下以 24.10.8 x86/64 为例，输入放在仓库 `input/` 下，输出使用空目录：
 
@@ -171,10 +171,10 @@ docker run --rm --platform linux/amd64 \
   --mount "type=bind,source=$PWD,target=/src,readonly" \
   --mount "type=bind,source=$PWD/openwrt-packages,target=/out" \
   -e SDK_DIR=/sdk -e HIDECK_VERSION=v2.1.23 -e OUTPUT_DIR=/out \
-  -e HIDECK_BINARY=/src/input/hideck_v2.1.23_openwrt_amd64 \
+  -e HIDECK_BINARY=/src/input/hideck_v2.1.23_openwrt_dynamic_amd64 \
   hideck-openwrt-sdk timeout 3500 sh /src/packaging/openwrt/build-packages.sh
 ```
 
-脚本验证 ELF 架构与静态链接、计算并校验输入哈希，使用 SDK 固定的 feeds revision 编译 ADB，仅收集三个 HiDeck 包。主包只封装已经编译好的静态程序，不重复构建 QMI/内核组件；包元数据仍声明这些依赖，由目标系统的 opkg/apk 检查并安装。输出带 SHA256SUMS；APK 额外签名并验证。标准库和内核依赖从目标系统匹配的软件源安装，不随附件混装。
+脚本验证 ELF 架构、动态 musl 解释器并校验输入哈希，使用 SDK 固定的 feeds revision 编译 ADB，仅收集三个 HiDeck 包。主包封装已经编译好的动态程序，并声明 `libgcc`、`lame-lib`、QMI 与内核组件依赖，由目标系统的 opkg/apk 检查并安装。输出带 SHA256SUMS；APK 额外签名并验证。标准库和内核依赖从目标系统匹配的软件源安装，不随附件混装。
 
 二进制发布工作流自动调用 [openwrt-packages.yml](../../.github/workflows/openwrt-packages.yml)，使用同次构建的 HiDeck，避免把尚不识别专用 ADB 路径的旧版本包装进来。也可手动触发 **Build Release Binaries** 从当前源码构建整套产物；源码提交和二进制版本会写入 `BUILDINFO`。`dev` 构建的包管理版本为 `0.0.0`，程序内版本仍为 `dev`；正式发布使用数字版本。

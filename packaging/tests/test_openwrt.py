@@ -59,20 +59,20 @@ class OpenWrtTests(unittest.TestCase):
             with self.subTest(script=script.name):
                 subprocess.run(["sh", "-n", str(script)], check=True, timeout=10)
 
-    def test_rejects_invalid_binary_without_starting_build(self):
+    def test_rejects_non_dynamic_musl_binary_without_starting_build(self):
         with tempfile.TemporaryDirectory(prefix="hideck-sdk-test-") as directory:
             sdk = Path(directory)
             (sdk / "include").mkdir()
             (sdk / "include/package.mk").touch()
             (sdk / ".config").write_text('CONFIG_ARCH="x86_64"\n')
             binary = sdk / "hideck"
-            binary.write_text("not a static ELF executable")
+            binary.write_text("not a dynamic musl ELF executable")
             environment = dict(os.environ, SDK_DIR=directory, HIDECK_BINARY=str(binary),
                                HIDECK_VERSION="v2.1.23", OUTPUT_DIR=str(sdk / "output"))
             result = subprocess.run(["sh", str(PACKAGING / "build-packages.sh")],
                                     env=environment, capture_output=True, text=True, timeout=10)
             self.assertNotEqual(result.returncode, 0)
-            self.assertIn("Expected a static Linux ELF binary", result.stderr)
+            self.assertIn("Expected a dynamic musl Linux ELF binary", result.stderr)
             self.assertFalse((sdk / "output").exists())
 
     def test_apk_signature_is_verified_and_private_key_not_exported(self):
@@ -97,7 +97,7 @@ class OpenWrtTests(unittest.TestCase):
         self.assertIn(r"arm:*ELF\ 32-bit*ARM*", script)
         self.assertIn(r"aarch64:*ELF\ 64-bit*aarch64*", script)
 
-    def test_release_publishes_dynamic_binary_without_changing_package_input(self):
+    def test_release_and_packages_use_dynamic_openwrt_binary(self):
         release = (ROOT / ".github/workflows/binary-release.yml").read_text()
         packages = (ROOT / ".github/workflows/openwrt-packages.yml").read_text()
 
@@ -107,8 +107,16 @@ class OpenWrtTests(unittest.TestCase):
             self.assertIn(f"sdk_id: {sdk_id}", release)
         self.assertIn("*-openwrt-linux-musl*-gcc", release)
         self.assertNotIn("zig-linux", release)
-        self.assertIn('asset="hideck_${HIDECK_VERSION}_openwrt_${BINARY_ARCH}"', packages)
-        self.assertNotIn("openwrt_dynamic_${BINARY_ARCH}", packages)
+        self.assertIn('asset="hideck_${HIDECK_VERSION}_openwrt_dynamic_${BINARY_ARCH}"', packages)
+        self.assertIn('HIDECK_BINARY=/src/input/hideck_${HIDECK_VERSION}_openwrt_dynamic_${BINARY_ARCH}', packages)
+
+        build_packages = (PACKAGING / "build-packages.sh").read_text()
+        self.assertIn("Expected a dynamic musl Linux ELF binary", build_packages)
+        self.assertIn('interpreter\\ /lib/ld-musl-', build_packages)
+
+        recipe = (PACKAGING / "hideck/Makefile").read_text()
+        self.assertIn("openwrt_dynamic_$(HIDECK_BINARCH)", recipe)
+        self.assertIn("+libgcc +lame-lib", recipe)
 
 
 if __name__ == "__main__":

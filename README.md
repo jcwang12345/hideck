@@ -140,7 +140,7 @@ curl -fsSL https://raw.githubusercontent.com/yibaiba/hideck/main/deploy-binary.s
 | `hideck_v2.1.35_openwrt_dynamic_arm64` | OpenWrt aarch64, dynamic musl, MP3 encoding capable |
 | `hideck_v2.1.35_openwrt_dynamic_armv7` | OpenWrt 32-bit ARM, dynamic musl, MP3 encoding capable |
 
-On OpenWrt, use `openwrt_*` only. The package-manager archives and binary installer use the static assets. The dynamic assets require matching runtime libraries and are intended for MP3 call recording; see [OpenWrt packaging](packaging/openwrt/README.md#openwrt-dynamic-musl).
+On OpenWrt, use `openwrt_*` only. The package-manager archives and binary installer select the dynamic-musl assets and require `libgcc` plus `lame-lib`, so MP3 call recording is checked before activation. Static assets remain available for manual recovery builds that do not need native recording; see [OpenWrt packaging](packaging/openwrt/README.md#openwrt-dynamic-musl).
 
 ## Configuration
 

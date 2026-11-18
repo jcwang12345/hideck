@@ -77,6 +77,7 @@ class DependencyTests(unittest.TestCase):
                                         TEST_OPENWRT="1", TEST_COMMANDS=manager)
                 self.assert_success(result)
                 for package in ("libqmi",
+                                "libgcc",
                                 "kmod-usb-net-qmi-wwan", "kmod-usb-serial-option",
                                 "lame-lib", "libopencore-amrnb"):
                     self.assertIn(f"PACKAGE {manager} {operation} {package}\n", result.stdout)
@@ -177,6 +178,27 @@ class DependencyTests(unittest.TestCase):
         self.assertIn("if ! install_runtime_dependencies; then\n  dependency_status=1", MAIN)
         self.assertIn('exit "$dependency_status"', MAIN)
         self.assertNotIn("install_recording_libraries || true", MAIN)
+
+    def test_openwrt_candidate_must_pass_mp3_self_check_before_install(self):
+        self.assertIn('ASSET_ARCH="openwrt_dynamic_${ARCH#openwrt_}"', MAIN)
+        verify = MAIN.index('verify_openwrt_recording_candidate "$DOWNLOAD_DIR/$ASSET_NAME"')
+        install = MAIN.index('install_binary_atomically "$DOWNLOAD_DIR/$ASSET_NAME"')
+        self.assertLess(verify, install)
+
+    def test_failed_mp3_self_check_preserves_installed_binary(self):
+        result = self.run_shell(r'''
+candidate=$(mktemp)
+cat >"$candidate" <<'EOF'
+#!/bin/sh
+printf 'Dynamic loading not supported\n' >&2
+exit 1
+EOF
+chmod 755 "$candidate"
+verify_openwrt_recording_candidate "$candidate"
+''')
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("保留现有 HiDeck", result.stderr)
+        self.assertIn("Dynamic loading not supported", result.stderr)
 
 
 class PackagingTests(unittest.TestCase):

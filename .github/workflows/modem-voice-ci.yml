@@ -6,6 +6,8 @@ on:
       - 'internal/modemvoice/**'
       - 'internal/modem/**'
       - 'internal/phone/**'
+      - 'internal/audiotranscode/**'
+      - 'cmd/hideck/**'
       - 'pkg/g711/**'
       - 'cmd/modem-voice-probe/**'
       - 'Dockerfile*'
@@ -33,7 +35,7 @@ jobs:
         with:
           go-version-file: go.mod
       - name: Unit and concurrency checks
-        run: timeout 60s go test -race -timeout 60s ./internal/modemvoice/... ./internal/modem ./internal/phone ./internal/volte ./cmd/modem-voice-probe ./pkg/g711
+        run: timeout 60s go test -race -timeout 60s ./internal/audiotranscode ./internal/modemvoice/... ./internal/modem ./internal/phone ./internal/volte ./cmd/hideck ./cmd/modem-voice-probe ./pkg/g711
       - name: Vet
         run: timeout 60s go vet ./internal/modemvoice/... ./cmd/modem-voice-probe ./pkg/g711
       - name: Deployment dependency contracts

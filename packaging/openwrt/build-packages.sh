@@ -1,5 +1,5 @@
 #!/bin/sh
-# Run inside a fresh OpenWrt SDK, with a previously built musl-static HiDeck.
+# Run inside a fresh OpenWrt SDK, with a previously built dynamic-musl HiDeck.
 set -eu
 
 SOURCE_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
@@ -28,9 +28,13 @@ if [ ! -f "$SDK_DIR/.config" ]; then
   make -C "$SDK_DIR" defconfig
 fi
 
-# Reject host/glibc binaries before they can be wrapped in an OpenWrt package.
+# Reject static or host/glibc binaries before they can be wrapped in an
+# OpenWrt package. Call recording requires dlopen on the target.
 binary_info=$(file -b "$HIDECK_BINARY")
-case "$binary_info" in *ELF*statically\ linked*) ;; *) echo 'Expected a static Linux ELF binary' >&2; exit 1 ;; esac
+case "$binary_info" in
+  *ELF*dynamically\ linked*interpreter\ /lib/ld-musl-*) ;;
+  *) echo 'Expected a dynamic musl Linux ELF binary' >&2; exit 1 ;;
+esac
 sdk_arch=$(sed -n 's/^CONFIG_ARCH="\([^"]*\)"$/\1/p' "$SDK_DIR/.config")
 case "$sdk_arch:$binary_info" in
   x86_64:*ELF\ 64-bit*x86-64*) binarch=amd64 ;;
@@ -39,7 +43,7 @@ case "$sdk_arch:$binary_info" in
   *) echo "Binary does not match SDK architecture: $sdk_arch" >&2; exit 1 ;;
 esac
 binary_hash=$(sha256sum "$HIDECK_BINARY" | cut -d ' ' -f 1)
-binary_source="hideck_v${HIDECK_VERSION}_openwrt_${binarch}"
+binary_source="hideck_v${HIDECK_VERSION}_openwrt_dynamic_${binarch}"
 
 mkdir -p "$OUTPUT_DIR"
 OUTPUT_DIR=$(CDPATH= cd -- "$OUTPUT_DIR" && pwd)
@@ -61,12 +65,12 @@ cd "$SDK_DIR"
 
 # SDK feed revisions are pinned in its feeds.conf.default.
 ./scripts/feeds update base packages
-./scripts/feeds install libqmi alsa-utils liblz4 libzstd protobuf libpcre2 libusb-1.0 zlib
+./scripts/feeds install libqmi lame alsa-utils liblz4 libzstd protobuf libpcre2 libusb-1.0 zlib
 printf '\nCONFIG_ALL=n\nCONFIG_PACKAGE_hideck=m\nCONFIG_PACKAGE_hideck-adb=m\nCONFIG_PACKAGE_hideck-modem-voice=m\n' >> .config
 make HIDECK_VERSION="$HIDECK_VERSION" HIDECK_PACKAGE_VERSION="$package_version" HIDECK_BINARY_SHA256="$binary_hash" defconfig
 make -j"$JOBS" HIDECK_ADB_JOBS="$JOBS" HIDECK_VERSION="$HIDECK_VERSION" HIDECK_PACKAGE_VERSION="$package_version" HIDECK_BINARY_SHA256="$binary_hash" \
   package/hideck-adb/compile V=s
-# HiDeck is already a verified static executable and the voice package is a
+# HiDeck is already a verified dynamic-musl executable and the voice package is a
 # dependency manifest. Package them without rebuilding system QMI/kernel tools;
 # their declared runtime dependencies remain enforced by opkg/apk on installation.
 make HIDECK_VERSION="$HIDECK_VERSION" HIDECK_PACKAGE_VERSION="$package_version" HIDECK_BINARY_SHA256="$binary_hash" \
