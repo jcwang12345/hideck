@@ -114,11 +114,65 @@ defineEmits<{
         </tbody>
       </table>
     </div>
+
+    <div class="proxy-mobile-list" aria-label="本地出站实例列表">
+      <article v-for="row in rows" :key="`mobile-${row.id}`" class="proxy-mobile-card">
+        <header>
+          <div>
+            <strong>{{ row.name }}</strong>
+            <small>{{ row.id || '无 ID' }}</small>
+          </div>
+          <ProxyStatusBadge :label="row.runningLabel" :tone="row.runningTone" />
+        </header>
+
+        <div class="proxy-mobile-endpoint">
+          <span>监听地址</span>
+          <code>{{ row.endpoint }}</code>
+        </div>
+
+        <dl>
+          <div><dt>模式 / 认证</dt><dd>{{ row.modeLabel }} · {{ row.authenticationLabel }}</dd></div>
+          <div><dt>设备绑定</dt><dd>{{ row.deviceLabel }}</dd></div>
+        </dl>
+        <p v-if="row.lastError" class="proxy-mobile-error">{{ row.lastError }}</p>
+
+        <footer>
+          <ProxyStatusBadge :label="row.enabledLabel" :tone="row.enabledTone" />
+          <span class="proxy-row-actions">
+            <button
+              v-if="!row.running"
+              type="button"
+              :disabled="!row.enabled"
+              :aria-label="`启动 ${row.name}`"
+              :title="`启动 ${row.name}`"
+              @click="$emit('start', row.id)"
+            ><Play24Regular aria-hidden="true" /></button>
+            <button
+              v-else
+              type="button"
+              :aria-label="`停止 ${row.name}`"
+              :title="`停止 ${row.name}`"
+              @click="$emit('stop', row.id)"
+            ><Stop24Regular aria-hidden="true" /></button>
+            <button type="button" :disabled="!row.enabled" :aria-label="`重启 ${row.name}`" :title="`重启 ${row.name}`" @click="$emit('restart', row.id)">
+              <ArrowSync24Regular aria-hidden="true" />
+            </button>
+            <button type="button" :aria-label="`编辑 ${row.name}`" :title="`编辑 ${row.name}`" @click="$emit('edit', row.id)">
+              <Edit24Regular aria-hidden="true" />
+            </button>
+            <button type="button" class="is-danger" :aria-label="`删除 ${row.name}`" :title="`删除 ${row.name}`" @click="$emit('delete', row.id)">
+              <Delete24Regular aria-hidden="true" />
+            </button>
+          </span>
+        </footer>
+      </article>
+    </div>
   </ProxyInventoryShell>
 </template>
 
 <style scoped>
 .proxy-table-wrap { min-width: 0; }
+.proxy-mobile-list { display: none; }
 .proxy-inventory-table { width: 100%; border-collapse: collapse; table-layout: fixed; }
 .proxy-inventory-table th { height: 40px; padding: 0 10px; border-bottom: 1px solid var(--ui-border); color: var(--ui-text-muted); font-size: var(--ui-font-caption); font-weight: 600; text-align: left; }
 .proxy-inventory-table td { min-width: 0; min-height: 58px; padding: 11px 10px; border-bottom: 1px solid var(--ui-border-muted); color: var(--ui-text); font-size: var(--ui-font-body-sm); vertical-align: middle; overflow-wrap: anywhere; }
@@ -171,5 +225,29 @@ defineEmits<{
   .proxy-inventory-table tr { grid-template-columns: minmax(0, 1fr); }
   .proxy-inventory-table td:nth-child(odd) { border-right: 0; }
   .proxy-inventory-table td:nth-last-child(2) { border-bottom: 1px solid var(--ui-border-muted) !important; }
+}
+
+@media (max-width: 640px) {
+  .proxy-table-wrap { display: none; }
+  .proxy-mobile-list { padding: 10px; display: grid; gap: 10px; }
+  .proxy-mobile-card { min-width: 0; overflow: hidden; border: 1px solid var(--ui-border); border-radius: var(--ui-radius-lg); background: var(--ui-surface-strong); }
+  .proxy-mobile-card > header { min-height: 58px; padding: 10px 12px; display: flex; align-items: center; justify-content: space-between; gap: 12px; border-bottom: 1px solid var(--ui-border-muted); }
+  .proxy-mobile-card > header div { min-width: 0; }
+  .proxy-mobile-card > header strong,
+  .proxy-mobile-card > header small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .proxy-mobile-card > header strong { color: var(--ui-text); font-size: var(--ui-font-body); }
+  .proxy-mobile-card > header small { margin-top: 3px; color: var(--ui-text-muted); font: var(--ui-font-caption) "v-mono", monospace; }
+  .proxy-mobile-endpoint { min-width: 0; padding: 10px 12px; display: grid; gap: 4px; }
+  .proxy-mobile-endpoint span,
+  .proxy-mobile-card dt { color: var(--ui-text-muted); font-size: var(--ui-font-caption); }
+  .proxy-mobile-endpoint code { color: var(--ui-text); font: var(--ui-font-body-sm)/1.5 "v-mono", monospace; overflow-wrap: anywhere; }
+  .proxy-mobile-card dl { margin: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); border-block: 1px solid var(--ui-border-muted); }
+  .proxy-mobile-card dl > div { min-width: 0; min-height: 66px; padding: 10px 12px; display: grid; align-content: center; gap: 5px; }
+  .proxy-mobile-card dl > div + div { border-left: 1px solid var(--ui-border-muted); }
+  .proxy-mobile-card dd { min-width: 0; margin: 0; color: var(--ui-text); font-size: var(--ui-font-body-sm); overflow-wrap: anywhere; }
+  .proxy-mobile-error { margin: 0; padding: 9px 12px; border-bottom: 1px solid var(--ui-border-muted); color: var(--ui-danger); font-size: var(--ui-font-caption); line-height: 1.45; }
+  .proxy-mobile-card footer { min-height: 58px; padding: 6px 8px 6px 12px; display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+  .proxy-row-actions { min-width: 0; overflow-x: auto; }
+  .proxy-row-actions button { width: 44px; height: 44px; flex: 0 0 44px; }
 }
 </style>

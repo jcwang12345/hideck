@@ -39,6 +39,7 @@ import { createEmptyTrafficAnalysis, trafficService, type TrafficRange } from '.
 import {
   ArrowSync24Regular,
   Add24Regular,
+  Location24Regular,
   Sim24Regular
 } from '@vicons/fluent'
 
@@ -968,6 +969,7 @@ watch(
     selectedDetail.value?.control_online === true
   ] as const,
   ([deviceID, iccid, setupAvailable, running, controlOnline]) => {
+    if (firstQueryValue(route.query.e911).trim() === '1') return
     if (!deviceID || !iccid || !setupAvailable || !running || !controlOnline) return
     if (e911Starting.value || e911WebsheetOpen.value) return
 
@@ -975,6 +977,30 @@ watch(
     if (!promptKey || e911AutoAttempts.has(promptKey)) return
     if (wasE911PromptShown(browserE911PromptStorage(), promptKey)) return
     void openE911Websheet({ automatic: true })
+  },
+  { immediate: true }
+)
+
+let explicitE911AttemptKey = ''
+watch(
+  () => [
+    firstQueryValue(route.query.e911).trim(),
+    selectedDetail.value?.id || '',
+    selectedDetail.value?.modem?.iccid || '',
+    selectedDetail.value?.e911_setup_available === true,
+    selectedDetail.value?.running === true,
+    selectedDetail.value?.control_online === true
+  ] as const,
+  async ([intent, deviceID, iccid, setupAvailable, running, controlOnline]) => {
+    if (intent !== '1' || !deviceID || !setupAvailable || !running || !controlOnline) return
+    const attemptKey = `${deviceID}:${iccid}`
+    if (explicitE911AttemptKey === attemptKey || e911Starting.value || e911WebsheetOpen.value) return
+    explicitE911AttemptKey = attemptKey
+
+    const query = { ...route.query }
+    delete query.e911
+    await router.replace({ name: 'Devices', query })
+    await openE911Websheet()
   },
   { immediate: true }
 )
@@ -1402,6 +1428,7 @@ usePollingScheduler(async () => {
       <div class="device-page-heading">
         <span>DEVICE MANAGEMENT</span>
         <h1>{{ t('devices.title') }}</h1>
+        <p>集中查看线路状态，并管理 SIM、eSIM 与连接配置</p>
       </div>
       <div class="device-global-actions">
         <RefreshButton :loading="loading" @click="fetchAll" />
@@ -1428,6 +1455,22 @@ usePollingScheduler(async () => {
       :retry-text="t('common.retry')"
       @retry="fetchAll"
     />
+
+    <button
+      v-if="selectedDevice?.e911_setup_available"
+      type="button"
+      class="mobile-e911-shortcut"
+      :disabled="e911Starting"
+      aria-label="补充 911 紧急地址"
+      @click="() => openE911Websheet()"
+    >
+      <span class="mobile-e911-shortcut-icon" aria-hidden="true"><Location24Regular /></span>
+      <span class="mobile-e911-shortcut-copy">
+        <strong>本卡需要设置 911 紧急地址</strong>
+        <small>补充地址后即可继续完成 Wi-Fi Calling 配置</small>
+      </span>
+      <span class="mobile-e911-shortcut-action">{{ e911Starting ? '打开中…' : '现在设置' }}</span>
+    </button>
 
     <div class="devices-layout">
       <DeviceListPanel
@@ -1607,6 +1650,10 @@ usePollingScheduler(async () => {
   container-type: inline-size;
 }
 
+.mobile-e911-shortcut {
+  display: none;
+}
+
 .tab-loading-state {
   min-height: 220px;
   padding: 28px;
@@ -1646,6 +1693,12 @@ usePollingScheduler(async () => {
   letter-spacing: -.02em;
 }
 
+.device-page-heading p {
+  margin: 5px 0 0;
+  color: var(--ui-text-muted);
+  font-size: var(--ui-font-body-sm);
+}
+
 .device-global-actions {
   margin-left: auto;
   justify-content: flex-end;
@@ -1660,7 +1713,7 @@ usePollingScheduler(async () => {
 
 @container (min-width: 980px) {
   .devices-layout {
-    grid-template-columns: 276px minmax(0, 1fr);
+    grid-template-columns: 248px minmax(0, 1fr);
   }
 }
 
@@ -1691,7 +1744,7 @@ usePollingScheduler(async () => {
 
 .device-workspace-surface {
   min-width: 0;
-  padding: 0 22px 22px;
+  padding: 0 20px 20px;
   overflow: hidden;
 }
 
@@ -1700,8 +1753,8 @@ usePollingScheduler(async () => {
 }
 
 .device-detail-tabs :deep(.el-tabs__header) {
-  margin: 0 -22px 22px;
-  padding: 0 22px;
+  margin: 0 -20px 20px;
+  padding: 0 20px;
   background: color-mix(in srgb, var(--ui-surface-strong) 72%, var(--ui-surface));
 }
 
@@ -1711,7 +1764,7 @@ usePollingScheduler(async () => {
 }
 
 .device-detail-tabs :deep(.el-tabs__item) {
-  height: 58px;
+  height: 52px;
   color: var(--ui-text-muted);
   font-size: 13px;
 }
@@ -1783,8 +1836,73 @@ usePollingScheduler(async () => {
 }
 
 @media (max-width: 760px) {
+  .mobile-e911-shortcut {
+    width: 100%;
+    min-height: 66px;
+    margin: 0 0 14px;
+    padding: 10px 12px;
+    display: grid;
+    grid-template-columns: 36px minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 10px;
+    border: 1px solid color-mix(in srgb, var(--ui-warning) 42%, var(--ui-border));
+    border-radius: var(--ui-radius-lg);
+    background: var(--ui-warning-surface);
+    color: var(--ui-text);
+    text-align: left;
+  }
+
+  .mobile-e911-shortcut:disabled {
+    cursor: wait;
+    opacity: .72;
+  }
+
+  .mobile-e911-shortcut-icon {
+    width: 36px;
+    height: 36px;
+    display: grid;
+    place-items: center;
+    border-radius: var(--ui-radius-md);
+    background: color-mix(in srgb, var(--ui-warning) 18%, var(--ui-surface));
+    color: var(--ui-warning);
+  }
+
+  .mobile-e911-shortcut-icon svg {
+    width: 22px;
+    height: 22px;
+  }
+
+  .mobile-e911-shortcut-copy {
+    min-width: 0;
+    display: grid;
+    gap: 2px;
+  }
+
+  .mobile-e911-shortcut-copy strong {
+    font-size: 13px;
+    line-height: 1.35;
+  }
+
+  .mobile-e911-shortcut-copy small {
+    color: var(--ui-text-muted);
+    font-size: var(--ui-font-caption);
+    line-height: 1.35;
+  }
+
+  .mobile-e911-shortcut-action {
+    min-height: 36px;
+    padding: 0 10px;
+    display: inline-flex;
+    align-items: center;
+    border-radius: var(--ui-radius-sm);
+    background: color-mix(in srgb, var(--ui-warning) 22%, var(--ui-surface));
+    font-size: var(--ui-font-caption);
+    font-weight: 700;
+    white-space: nowrap;
+  }
+
   .device-workspace-surface {
-    padding: 0 14px 14px;
+    padding: 0 12px 16px;
   }
 
   .device-workspace-empty {
@@ -1792,9 +1910,26 @@ usePollingScheduler(async () => {
   }
 
   .device-detail-tabs :deep(.el-tabs__header) {
-    margin-right: -14px;
-    margin-left: -14px;
-    padding: 0 14px;
+    margin-right: -12px;
+    margin-left: -12px;
+    padding: 0 12px;
+  }
+
+  .device-detail-tabs :deep(.el-tabs__nav-wrap) {
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+}
+
+@media (max-width: 420px) {
+  .mobile-e911-shortcut {
+    grid-template-columns: 34px minmax(0, 1fr);
+  }
+
+  .mobile-e911-shortcut-action {
+    min-height: 38px;
+    grid-column: 1 / -1;
+    justify-content: center;
   }
 }
 </style>

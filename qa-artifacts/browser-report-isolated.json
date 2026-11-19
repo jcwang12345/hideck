@@ -1,0 +1,501 @@
+{
+  "desktop-dashboard.png": {
+    "title": "HiDeck",
+    "hash": "#/",
+    "readyState": "complete",
+    "innerWidth": 1920,
+    "innerHeight": 1080,
+    "scrollWidth": 1920,
+    "scrollHeight": 1080,
+    "horizontalOverflow": false,
+    "mobileNavLabels": [],
+    "mobileNavRect": null,
+    "dialRect": null,
+    "e911Mentions": 3,
+    "hasE911Dialog": false,
+    "bodyText": "H\nHiDeck\nMODEM CONTROL\n仪表盘\n设备管理\n电话\n代理管理\n短信中心\n命令中心\n自动任务\n实时日志\n系统设置\nEN\nAdmin\nAdministrator\nHIDECK\n仪表盘\n实时连接\n1\nHIDECK / CONTROL PLANE\n连接总览\n\n统一查看全部通信设备、VoWiFi 链路与出口流量\n\n刷新\n当前线路\n在线\nWi-Fi Calling\n已连接\n\n1 · -- · VoWiFi\n\nIMS 已注册，短信接收待验证\n启用 Wi-Fi Calling 前需完成紧急地址设置\n当前 SIM 需要补充 911 地址（E911）\n补充 911 地址\n管理当前设备\n连接进程\nSIM\n就绪\nAccess\n已接入\nTunnel\n已建立\nIMS\n已注册\nSMS TX\n可发送\nSMS RX\n待验证\n接入方式\nWi-Fi\n运营商 / 连接\nAT&T · VoWiFi\nWi-Fi Calling 健康\n正在恢复\n本次会话可用率\n95.4%\n稳定时长\n30分钟\n链路状态\n已连接\nDEVICE FLEET\n设备编队 · 活动\n\n共 1 台设备，1 台在线 · 更新 23:05:14\n\n刷新\n全部\n1\n在线\n1\n离线\n0\n全部\n在线\n离线\n设备编号\n信号\n运营商\n健康状态\n最近事件\nEC20 Development Line\n-- · VoWiFi\n-78 dBm\nAT&T\nVoWiFi\n正在恢复\nIMS 已注册，短信接收待验证\n2026-11-19 23:05:14\nTRAFFIC ANALYSIS\n流量分析\n\n数据每分钟采样一次，按日/周/月聚合\n\n日\n周\n月\n刷新\n查看明细\n本日下载\n0 B\n本日上传\n0 B\n本日合计\n0 B\n暂无流量图表数据",
+    "errors": []
+  },
+  "desktop-phone.png": {
+    "title": "HiDeck",
+    "hash": "#/phone",
+    "readyState": "complete",
+    "innerWidth": 1920,
+    "innerHeight": 1080,
+    "scrollWidth": 1920,
+    "scrollHeight": 1080,
+    "horizontalOverflow": false,
+    "mobileNavLabels": [],
+    "mobileNavRect": null,
+    "dialRect": null,
+    "e911Mentions": 0,
+    "hasE911Dialog": false,
+    "bodyText": "H\nHiDeck\nMODEM CONTROL\n仪表盘\n设备管理\n电话\n代理管理\n短信中心\n命令中心\n自动任务\n实时日志\n系统设置\nEN\nAdmin\nAdministrator\nHIDECK\n电话\n实时连接\n1\nHIDECK / CONTROL PLANE\n电话\n\n通过 VoWiFi 设备进行浏览器实时语音与 DTMF 通话\n\n连接 MCP\n听筒未连接\n麦克风需要受信任的 HTTPS\n\n当前 HTTP 页面可“仅听接听”或“仅听呼叫”，不会申请麦克风，因此对方听不到你。请通过已配置的 Nginx、Caddy 或其他受信任 HTTPS 地址访问后再使用双向通话。\n\n电话事件流已关闭\n×\nWEBRTC HANDSET\n拨号\n\n选择线路并输入号码\n\n语音设备\nEC20 Development Line · WiFi calling · 就绪\nWiFi calling\n蜂窝数据\nVoLTE\n模组直拨\n启动\n已启动，正在走 WiFi calling\n\n这张分享卡不能驻国内网，否则 IMSI 会切到 20404，WiFi calling 会废\n\nWiFi calling · 就绪\n电话号码\n本卡区号 +1\n \n1\n \n2\nABC\n3\nDEF\n4\nGHI\n5\nJKL\n6\nMNO\n7\nPQRS\n8\nTUV\n9\nWXYZ\n*\n \n0\n \n#\n \n+ 国际号码\n仅听呼叫\n双向呼叫\n\n当前页面只能仅听呼叫，对方听不到你。\n\nCONTACTS\n联系人\n0\n查看全部\nCALL LOG\n最近通话\n0\n暂无通话记录",
+    "errors": []
+  },
+  "desktop-sms.png": {
+    "title": "HiDeck",
+    "hash": "#/sms",
+    "readyState": "complete",
+    "innerWidth": 1920,
+    "innerHeight": 1080,
+    "scrollWidth": 1920,
+    "scrollHeight": 1080,
+    "horizontalOverflow": false,
+    "mobileNavLabels": [],
+    "mobileNavRect": null,
+    "dialRect": null,
+    "e911Mentions": 0,
+    "hasE911Dialog": false,
+    "bodyText": "H\nHiDeck\nMODEM CONTROL\n仪表盘\n设备管理\n电话\n代理管理\n短信中心\n命令中心\n自动任务\n实时日志\n系统设置\nEN\nAdmin\nAdministrator\nHIDECK\n短信中心\n实时连接\n1\n设备\n1/1 在线\n全部设备\n1 台设备\nEC20 Development Line\n在线 · AT&T\n新建\n+\n+12025550184\nHiDeck interface review message\n23:05:14\n+19096754729\n+12025550184\nEC20 Development Line · AT&T\nVoWiFi · SMS 可发送\nIMS 已注册\n2026-11-19\nEC20 Development Line\n2026-11-19 23:05:14\n已接收\n\nHiDeck interface review message\n\n发送\nGSM7 · 预计 1 段 · 0 字\nEnter 发送 · Shift+Enter 换行",
+    "errors": []
+  },
+  "mobile-login.png": {
+    "title": "HiDeck",
+    "hash": "#/login",
+    "readyState": "complete",
+    "innerWidth": 390,
+    "innerHeight": 844,
+    "scrollWidth": 390,
+    "scrollHeight": 844,
+    "horizontalOverflow": false,
+    "mobileNavLabels": [],
+    "mobileNavRect": null,
+    "dialRect": null,
+    "e911Mentions": 0,
+    "hasE911Dialog": false,
+    "bodyText": "EN\nCORE-01\nGW-02\nBTS-07\nH\nHiDeck\nMODEM CONTROL\nTELECOM OPERATIONS\n通信模组控制台\nSECURE ACCESS\n登录 HiDeck\n\n使用管理账户进入控制台\n\n用户名\n密码\n登录\nHiDeck · 2026",
+    "errors": []
+  },
+  "mobile-dashboard.png": {
+    "title": "HiDeck",
+    "hash": "#/",
+    "readyState": "complete",
+    "innerWidth": 390,
+    "innerHeight": 844,
+    "scrollWidth": 390,
+    "scrollHeight": 844,
+    "horizontalOverflow": false,
+    "mobileNavLabels": [
+      "仪表盘",
+      "设备",
+      "拨号",
+      "短信",
+      "更多"
+    ],
+    "mobileNavRect": {
+      "x": 0,
+      "y": 776,
+      "width": 390,
+      "height": 68,
+      "top": 776,
+      "right": 390,
+      "bottom": 844,
+      "left": 0
+    },
+    "dialRect": {
+      "x": 157.1875,
+      "y": 782,
+      "width": 75.609375,
+      "height": 62,
+      "top": 782,
+      "right": 232.796875,
+      "bottom": 844,
+      "left": 157.1875
+    },
+    "e911Mentions": 3,
+    "hasE911Dialog": false,
+    "bodyText": "仪表盘\n1\nHIDECK / CONTROL PLANE\n连接总览\n\n统一查看全部通信设备、VoWiFi 链路与出口流量\n\n刷新\n当前设备\nEC20 Development Line · 1\n当前线路\n在线\nWi-Fi Calling\n已连接\n\n1 · -- · VoWiFi\n\nIMS 已注册，短信接收待验证\n启用 Wi-Fi Calling 前需完成紧急地址设置\n当前 SIM 需要补充 911 地址（E911）\n补充 911 地址\n管理当前设备\n连接进程\nSIM\n就绪\nAccess\n已接入\nTunnel\n已建立\nIMS\n已注册\nSMS TX\n可发送\nSMS RX\n待验证\n接入方式\nWi-Fi\n运营商 / 连接\nAT&T · VoWiFi\nWi-Fi Calling 健康\n正在恢复\n本次会话可用率\n95.4%\n稳定时长\n30分钟\n链路状态\n已连接\nDEVICE FLEET\n设备编队 · 活动\n\n共 1 台设备，1 台在线 · 更新 23:05:15\n\n刷新\n全部\n1\n在线\n1\n离线\n0\n全部\n在线\n离线\nEC20 Development Line\n-- · VoWiFi\n-78 dBm\n正在恢复\nIMS 已注册，短信接收待验证\n2026-11-19 23:05:14\nTRAFFIC ANALYSIS\n流量分析\n\n数据每分钟采样一次，按日/周/月聚合\n\n日\n周\n月\n刷新\n查看明细\n本日下载\n0 B\n本日上传\n0 B\n本日合计\n0 B\n暂无流量图表数据\n仪表盘\n设备\n拨号\n短信\n更多",
+    "errors": [],
+    "dialClick": {
+      "found": true,
+      "before": "#/",
+      "after": "#/phone"
+    }
+  },
+  "mobile-devices.png": {
+    "title": "HiDeck",
+    "hash": "#/devices",
+    "readyState": "complete",
+    "innerWidth": 390,
+    "innerHeight": 844,
+    "scrollWidth": 390,
+    "scrollHeight": 844,
+    "horizontalOverflow": false,
+    "mobileNavLabels": [
+      "仪表盘",
+      "设备",
+      "拨号",
+      "短信",
+      "更多"
+    ],
+    "mobileNavRect": {
+      "x": 0,
+      "y": 776,
+      "width": 390,
+      "height": 68,
+      "top": 776,
+      "right": 390,
+      "bottom": 844,
+      "left": 0
+    },
+    "dialRect": {
+      "x": 157.1875,
+      "y": 782,
+      "width": 75.609375,
+      "height": 62,
+      "top": 782,
+      "right": 232.796875,
+      "bottom": 844,
+      "left": 157.1875
+    },
+    "e911Mentions": 8,
+    "hasE911Dialog": false,
+    "bodyText": "设备管理\n1\nDEVICE MANAGEMENT\n设备管理\n\n集中查看线路状态，并管理 SIM、eSIM 与连接配置\n\n刷新\n重新扫描\n添加设备\n本卡需要设置 911 紧急地址\n补充地址后即可继续完成 Wi-Fi Calling 配置\n现在设置\nDEVICE RAIL\n设备轨道\n1 / 1\n全部状态\n排序：名称\n升序\nEC20 Development Line\n1 · wwan0\nWiFi calling · AT&T · FDD LTE\n在线\nDEVICE WORKSPACE\nEC20 Development Line\n在线\n\n运营商\nAT&T\n\nIMEI\n867530900000001\nICCID\n89014103211118510720\n协议\nQMI\n接口\nwwan0\n短信\n重连 VoWiFi\n重启模组\n概览\neSIM\nAT 终端\nUSSD 终端\n卡策略\n配置\nEMERGENCY ADDRESS\n启用 Wi‑Fi Calling 前需要完成紧急地址设置\n\n当前 SIM 需要补充 911 地址，以便紧急呼叫时向当地服务提供正确的位置。\n\n补充 911 地址\nWI-FI CALLING\nVoWiFi 已连接\n\nIMS 已注册，短信接收待验证\n\nSIM\nAccess\nTunnel\nIMS\nSMS TX\nSMS RX · 待验证\n接入方式\nWi-Fi Calling\n数据平面\n不可用\n协议\nQMI\n接口\nwwan0\n最后原因\n无\n错误分类\n无\nWiFi Calling 健康度\n正在恢复\nIMS SMS receiver is awaiting downlink verification\n95.4%\n本次会话可用率\n监测时长\n2小时2分\n当前稳定\n30分钟\n中断次数\n3 次\n最长中断\n2分钟\n连接时间轴\n本次运行会话\n稳定\n恢复中\n不可用\n近期事件\n含主动关闭记录\n\n暂无状态事",
+    "errors": [],
+    "dialClick": {
+      "found": true,
+      "before": "#/devices",
+      "after": "#/phone"
+    }
+  },
+  "mobile-phone.png": {
+    "title": "HiDeck",
+    "hash": "#/phone",
+    "readyState": "complete",
+    "innerWidth": 390,
+    "innerHeight": 844,
+    "scrollWidth": 390,
+    "scrollHeight": 844,
+    "horizontalOverflow": false,
+    "mobileNavLabels": [
+      "仪表盘",
+      "设备",
+      "拨号",
+      "短信",
+      "更多"
+    ],
+    "mobileNavRect": {
+      "x": 0,
+      "y": 776,
+      "width": 390,
+      "height": 68,
+      "top": 776,
+      "right": 390,
+      "bottom": 844,
+      "left": 0
+    },
+    "dialRect": {
+      "x": 157.1875,
+      "y": 782,
+      "width": 75.609375,
+      "height": 62,
+      "top": 782,
+      "right": 232.796875,
+      "bottom": 844,
+      "left": 157.1875
+    },
+    "e911Mentions": 0,
+    "hasE911Dialog": false,
+    "bodyText": "电话\n1\n电话\n连接 MCP\n听筒未连接\n麦克风需要受信任的 HTTPS\n\n当前 HTTP 页面可“仅听接听”或“仅听呼叫”，不会申请麦克风，因此对方听不到你。请通过已配置的 Nginx、Caddy 或其他受信任 HTTPS 地址访问后再使用双向通话。\n\n电话事件流已关闭\n×\n拨号\n语音设备\nWiFi calling\n通话设置\nEC20 Development Line · WiFi calling · 就绪\nWiFi calling · 就绪\n电话号码\n本卡区号 +1\n \n1\n \n2\nABC\n3\nDEF\n4\nGHI\n5\nJKL\n6\nMNO\n7\nPQRS\n8\nTUV\n9\nWXYZ\n*\n \n0\n \n#\n \n+ 国际号码\n仅听呼叫\n双向呼叫\n\n当前页面只能仅听呼叫，对方听不到你。\n\nCONTACTS\n联系人\n0\n查看全部\nCALL LOG\n最近通话\n0\n暂无通话记录\n仪表盘\n设备\n拨号\n短信\n更多",
+    "errors": [],
+    "dialClick": {
+      "found": true,
+      "before": "#/phone",
+      "after": "#/phone"
+    }
+  },
+  "mobile-sms.png": {
+    "title": "HiDeck",
+    "hash": "#/sms",
+    "readyState": "complete",
+    "innerWidth": 390,
+    "innerHeight": 844,
+    "scrollWidth": 390,
+    "scrollHeight": 844,
+    "horizontalOverflow": false,
+    "mobileNavLabels": [
+      "仪表盘",
+      "设备",
+      "拨号",
+      "短信",
+      "更多"
+    ],
+    "mobileNavRect": {
+      "x": 0,
+      "y": 776,
+      "width": 390,
+      "height": 68,
+      "top": 776,
+      "right": 390,
+      "bottom": 844,
+      "left": 0
+    },
+    "dialRect": {
+      "x": 157.1875,
+      "y": 782,
+      "width": 75.609375,
+      "height": 62,
+      "top": 782,
+      "right": 232.796875,
+      "bottom": 844,
+      "left": 157.1875
+    },
+    "e911Mentions": 0,
+    "hasE911Dialog": false,
+    "bodyText": "短信中心\n1\n设备\n1/1 在线\n全部设备\n1 台设备\nEC20 Development Line\n在线 · AT&T\n仪表盘\n设备\n拨号\n短信\n更多",
+    "errors": [],
+    "dialClick": {
+      "found": true,
+      "before": "#/sms",
+      "after": "#/phone"
+    }
+  },
+  "mobile-proxy.png": {
+    "title": "HiDeck",
+    "hash": "#/proxy",
+    "readyState": "complete",
+    "innerWidth": 390,
+    "innerHeight": 844,
+    "scrollWidth": 390,
+    "scrollHeight": 844,
+    "horizontalOverflow": false,
+    "mobileNavLabels": [
+      "仪表盘",
+      "设备",
+      "拨号",
+      "短信",
+      "更多"
+    ],
+    "mobileNavRect": {
+      "x": 0,
+      "y": 776,
+      "width": 390,
+      "height": 68,
+      "top": 776,
+      "right": 390,
+      "bottom": 844,
+      "left": 0
+    },
+    "dialRect": {
+      "x": 157.1875,
+      "y": 782,
+      "width": 75.609375,
+      "height": 62,
+      "top": 782,
+      "right": 232.796875,
+      "bottom": 844,
+      "left": 157.1875
+    },
+    "e911Mentions": 0,
+    "hasE911Dialog": false,
+    "bodyText": "代理管理\n1\nHIDECK / CONTROL PLANE\n代理管理\n\n配置 VoWiFi 漫游路由与绑定物理网络接口的本地出口\n\n漫游前置代理\n0\n本地出站代理\n0\n前置启用\n0 / 0\n国家规则\n0\n本地运行\n0 / 0\nROAMING PROXY INVENTORY\n漫游前置代理\n\nSIM 国家规则用于选择代理；出口国家由 Cloudflare HTTPS 实测，UDP 路径可能不同。VoWiFi 仍由实际 ePDG/IKE 建链确认。\n\n刷新\n新增代理\n∅\n暂无前置代理\n创建 Socks5 前置代理后，按 SIM 归属国家配置 VoWiFi 路由。同一国家可绑多条，未配置则直连。\n仪表盘\n设备\n拨号\n短信\n更多",
+    "errors": [],
+    "dialClick": {
+      "found": true,
+      "before": "#/proxy",
+      "after": "#/phone"
+    }
+  },
+  "mobile-commands.png": {
+    "title": "HiDeck",
+    "hash": "#/commands",
+    "readyState": "complete",
+    "innerWidth": 390,
+    "innerHeight": 844,
+    "scrollWidth": 390,
+    "scrollHeight": 844,
+    "horizontalOverflow": false,
+    "mobileNavLabels": [
+      "仪表盘",
+      "设备",
+      "拨号",
+      "短信",
+      "更多"
+    ],
+    "mobileNavRect": {
+      "x": 0,
+      "y": 776,
+      "width": 390,
+      "height": 68,
+      "top": 776,
+      "right": 390,
+      "bottom": 844,
+      "left": 0
+    },
+    "dialRect": {
+      "x": 157.1875,
+      "y": 782,
+      "width": 75.609375,
+      "height": 62,
+      "top": 782,
+      "right": 232.796875,
+      "bottom": 844,
+      "left": 157.1875
+    },
+    "e911Mentions": 0,
+    "hasE911Dialog": false,
+    "bodyText": "命令中心\n1\nHiDeck 命令会话\n正在重连\n当前设备 · 0 条记录 · 更新 23:05:15\n目标设备\nEC20 Development Line\n暂无命令记录\n选择下方真实命令后，执行过程会显示在这里\n仪表盘\n设备\n拨号\n短信\n更多",
+    "errors": [],
+    "dialClick": {
+      "found": true,
+      "before": "#/commands",
+      "after": "#/phone"
+    }
+  },
+  "mobile-tasks.png": {
+    "title": "HiDeck",
+    "hash": "#/automatic-tasks",
+    "readyState": "complete",
+    "innerWidth": 390,
+    "innerHeight": 844,
+    "scrollWidth": 390,
+    "scrollHeight": 844,
+    "horizontalOverflow": false,
+    "mobileNavLabels": [
+      "仪表盘",
+      "设备",
+      "拨号",
+      "短信",
+      "更多"
+    ],
+    "mobileNavRect": {
+      "x": 0,
+      "y": 776,
+      "width": 390,
+      "height": 68,
+      "top": 776,
+      "right": 390,
+      "bottom": 844,
+      "left": 0
+    },
+    "dialRect": {
+      "x": 157.1875,
+      "y": 782,
+      "width": 75.609375,
+      "height": 62,
+      "top": 782,
+      "right": 232.796875,
+      "bottom": 844,
+      "left": 157.1875
+    },
+    "e911Mentions": 0,
+    "hasE911Dialog": false,
+    "bodyText": "自动任务\n1\nHIDECK / AUTOMATION\n自动任务\n\n定时执行短信、通话与公网 IP 任务\n\n刷新\n新建任务\n0 个任务\n0 已启用\n0 执行中\n下次运行 暂无\n暂无自动任务\n使用页面右上角“新建任务”创建第一条计划\n仪表盘\n设备\n拨号\n短信\n更多",
+    "errors": [],
+    "dialClick": {
+      "found": true,
+      "before": "#/automatic-tasks",
+      "after": "#/phone"
+    }
+  },
+  "mobile-logs.png": {
+    "title": "HiDeck",
+    "hash": "#/logs",
+    "readyState": "complete",
+    "innerWidth": 390,
+    "innerHeight": 844,
+    "scrollWidth": 390,
+    "scrollHeight": 844,
+    "horizontalOverflow": false,
+    "mobileNavLabels": [
+      "仪表盘",
+      "设备",
+      "拨号",
+      "短信",
+      "更多"
+    ],
+    "mobileNavRect": {
+      "x": 0,
+      "y": 776,
+      "width": 390,
+      "height": 68,
+      "top": 776,
+      "right": 390,
+      "bottom": 844,
+      "left": 0
+    },
+    "dialRect": {
+      "x": 157.1875,
+      "y": 782,
+      "width": 75.609375,
+      "height": 62,
+      "top": 782,
+      "right": 232.796875,
+      "bottom": 844,
+      "left": 157.1875
+    },
+    "e911Mentions": 0,
+    "hasE911Dialog": false,
+    "bodyText": "实时日志\n1\nLIVE STREAM\n实时连接\n已缓存\n0\n条日志\n全部\n显示 0 / 0\n自动追尾\nSYSTEM OUTPUT\n运行时输出\n等待日志...\n仪表盘\n设备\n拨号\n短信\n更多",
+    "errors": [],
+    "dialClick": {
+      "found": true,
+      "before": "#/logs",
+      "after": "#/phone"
+    }
+  },
+  "mobile-settings.png": {
+    "title": "HiDeck",
+    "hash": "#/settings",
+    "readyState": "complete",
+    "innerWidth": 390,
+    "innerHeight": 844,
+    "scrollWidth": 390,
+    "scrollHeight": 844,
+    "horizontalOverflow": false,
+    "mobileNavLabels": [
+      "仪表盘",
+      "设备",
+      "拨号",
+      "短信",
+      "更多"
+    ],
+    "mobileNavRect": {
+      "x": 0,
+      "y": 776,
+      "width": 390,
+      "height": 68,
+      "top": 776,
+      "right": 390,
+      "bottom": 844,
+      "left": 0
+    },
+    "dialRect": {
+      "x": 157.1875,
+      "y": 782,
+      "width": 75.609375,
+      "height": 62,
+      "top": 782,
+      "right": 232.796875,
+      "bottom": 844,
+      "left": 157.1875
+    },
+    "e911Mentions": 0,
+    "hasE911Dialog": false,
+    "bodyText": "系统设置\n1\nGATEWAY CONTROL\n系统配置已加载\nHiDeck Gateway\n\n管理访问安全、运行环境、系统集成与消息通知通道\n\n通知通道\n0 / 10\n接口映射\nOPENWRT\n配置\nLOADED\n系统版本\n2.1.42-qa\n构建时间\n2026-11-19 23:05:14\n通知服务\n0 ENABLED\n安全\n\n更新访问凭证\n\n当前密码\n新密码\n确认新密码\n更新凭证\n系统信息\n\n运行环境\n\n版本\n检查更新\n2.1.42-qa\n构建时间\n2026-11-19 23:05:14\n配置路径\nqa\n项目主页\nhttps://github.com/yibaiba/hideck\nAPI 文档\n打开后端直出的 OpenAPI 页面\n打开 API 文档\n经典主题\n旧版深色外观。顶栏太阳按钮只切换海军浅色 / 夜间\n界面语言\n控制台显示语言，保存在本机浏览器\n中文\nEnglish\nOpenWrt 动态接口映射\nnetifd\n未接来电自动应答\n每台设备独立设置等待时间；默认关闭，不依赖浏览器保持在线。通话结束后，录音会发送到支持附件的 Bot 渠道。\n共用播放录音\n\n支持 WAV / AMR / AMR-WB / MP3，最大 16 MiB；上传后自动转换为单声道 PCM16 WAV（8 kHz），最长 30 秒，超出自动截断。\n\n尚未上传录音\n选择音频\n按设备设置\n共 1 台，已启用 0 台\n保存修改\nEC20 Development Line\n1\n自动接听\n无人接听后\n秒\nMCP 接入\n\n通过 AI 助手管理设备、短信和电话。\n\n服务地址 · 已关闭\n复制地址\n\n令牌拥有全部业务权限，可随时撤销。网页音频需在电话页授权。\n\n令牌名称 （必填）\n创建令牌\n\n尚未创建令牌。\n\nAgent / 客户端\nCodex\n\n配置文件：~/.codex/config.toml\n\n保存后重",
+    "errors": [],
+    "dialClick": {
+      "found": true,
+      "before": "#/settings",
+      "after": "#/phone"
+    }
+  },
+  "desktop-settings.png": {
+    "title": "HiDeck",
+    "hash": "#/settings",
+    "readyState": "complete",
+    "innerWidth": 1920,
+    "innerHeight": 1080,
+    "scrollWidth": 1920,
+    "scrollHeight": 1080,
+    "horizontalOverflow": false,
+    "mobileNavLabels": [],
+    "mobileNavRect": null,
+    "dialRect": null,
+    "e911Mentions": 0,
+    "hasE911Dialog": false,
+    "bodyText": "H\nHiDeck\nMODEM CONTROL\n仪表盘\n设备管理\n电话\n代理管理\n短信中心\n命令中心\n自动任务\n实时日志\n系统设置\nEN\nAdmin\nAdministrator\nHIDECK\n系统设置\n实时连接\n1\nGATEWAY CONTROL\n系统配置已加载\nHiDeck Gateway\n\n管理访问安全、运行环境、系统集成与消息通知通道\n\n通知通道\n0 / 10\n接口映射\nOPENWRT\n配置\nLOADED\n系统版本\n2.1.42-qa\n构建时间\n2026-11-19 23:05:14\n通知服务\n0 ENABLED\n安全\n\n更新访问凭证\n\n当前密码\n新密码\n确认新密码\n更新凭证\n系统信息\n\n运行环境\n\n版本\n检查更新\n2.1.42-qa\n构建时间\n2026-11-19 23:05:14\n配置路径\nqa\n项目主页\nhttps://github.com/yibaiba/hideck\nAPI 文档\n打开后端直出的 OpenAPI 页面\n打开 API 文档\n经典主题\n旧版深色外观。顶栏太阳按钮只切换海军浅色 / 夜间\n界面语言\n控制台显示语言，保存在本机浏览器\n中文\nEnglish\nOpenWrt 动态接口映射\nnetifd\n未接来电自动应答\n每台设备独立设置等待时间；默认关闭，不依赖浏览器保持在线。通话结束后，录音会发送到支持附件的 Bot 渠道。\n共用播放录音\n\n支持 WAV / AMR / AMR-WB / MP3，最大 16 MiB；上传后自动转换为单声道 PCM16 WAV（8 kHz），最长 30 秒，超出自动截断。\n\n尚未上传录音\n选择音频\n按设备设置\n共 1 台，已启用 0 台\n保存修改\n设备\n自动接听\n无人接听后\nEC20 Development Line\n1\n秒\nMCP 接入\n\n通过 AI 助手管理设备、短信和电话。\n\n服务地址 · 已关闭\n复制地址\n\n令牌拥",
+    "errors": []
+  }
+}

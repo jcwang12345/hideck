@@ -137,17 +137,16 @@ function copyFact(fact: IdentityFact) {
       </div>
 
       <div v-if="device?.e911_setup_available" class="identity-fact identity-e911">
-        <dt>E911 地址</dt>
+        <dt>911 紧急地址</dt>
         <dd>
           <el-button
             size="small"
-            type="primary"
-            plain
+            type="warning"
             :loading="e911Starting"
-            class="!border-0"
+            class="identity-e911-action !border-0"
             @click="emit('setup-e911')"
           >
-            设置地址
+            补充 911 地址
           </el-button>
         </dd>
       </div>
@@ -190,7 +189,12 @@ function copyFact(fact: IdentityFact) {
 .identity-value.is-status { width: fit-content; padding: 3px 8px; border: 1px solid color-mix(in srgb, var(--ui-primary) 28%, var(--ui-border)); border-radius: 999px; background: color-mix(in srgb, var(--ui-primary) 7%, transparent); color: var(--ui-primary); font-family: "v-sans", system-ui, sans-serif; font-size: var(--ui-font-caption); }
 .identity-operator { display: inline-flex; align-items: center; gap: 8px; }
 .identity-flag { width: 20px; height: 14px; flex: 0 0 20px; overflow: hidden; border-radius: 2px; box-shadow: 0 0 0 1px color-mix(in srgb, var(--ui-text) 12%, transparent); }
+.identity-e911 {
+  background: color-mix(in srgb, var(--ui-warning) 7%, var(--ui-surface));
+}
+.identity-e911 dt { color: color-mix(in srgb, var(--ui-warning) 74%, var(--ui-text)); }
 .identity-e911 dd { display: flex; justify-content: flex-start; }
+.identity-e911-action { min-height: 36px; font-weight: 700; }
 
 @media (max-width: 520px) {
   .identity-header { align-items: flex-start; padding: 14px; }

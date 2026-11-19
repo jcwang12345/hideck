@@ -90,4 +90,13 @@ const keys = [
 @media (prefers-reduced-motion: reduce) {
   .dial-key { transition: none; }
 }
+
+@media (max-width: 640px) {
+  .dial-pad-group { width: min(100%, 300px); }
+  .dial-pad { gap: 8px; }
+  .dial-key { height: 54px; border-radius: var(--ui-radius-lg); }
+  .dial-key span { font-size: 21px; }
+  .dial-key small { margin-top: 3px; }
+  .dial-plus { margin-top: 8px; }
+}
 </style>

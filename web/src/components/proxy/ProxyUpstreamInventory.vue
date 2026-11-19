@@ -119,11 +119,55 @@ defineEmits<{
         </tbody>
       </table>
     </div>
+
+    <div class="proxy-mobile-list" aria-label="漫游前置代理列表">
+      <article v-for="row in rows" :key="`mobile-${row.id}`" class="proxy-mobile-card">
+        <header>
+          <div>
+            <strong>{{ row.name }}</strong>
+            <small>{{ row.id || '无 ID' }}</small>
+          </div>
+          <ProxyStatusBadge :label="row.enabledLabel" :tone="row.enabledTone" />
+        </header>
+
+        <code class="proxy-mobile-endpoint">{{ row.address }}</code>
+        <small class="proxy-observation-meta">{{ row.authenticationLabel }}</small>
+
+        <dl>
+          <div>
+            <dt>公共 DNS UDP</dt>
+            <dd><ProxyStatusBadge :detail="row.healthDetail" :label="row.healthLabel" :tone="row.healthTone" /></dd>
+            <small v-if="row.healthTone === 'danger'" class="proxy-health-detail">{{ row.healthDetail }}</small>
+          </div>
+          <div>
+            <dt>HTTPS 实测出口</dt>
+            <dd><ProxyStatusBadge :label="row.egress.label" :tone="row.egress.tone" :detail="row.egress.detail" /></dd>
+            <code v-if="row.egress.ip">{{ row.egress.ip }}</code>
+          </div>
+        </dl>
+
+        <footer>
+          <button type="button" class="proxy-mobile-rule" @click="$emit('rules', row.id)">
+            <Link24Regular aria-hidden="true" />
+            国家规则 {{ row.ruleCount }}
+          </button>
+          <span class="proxy-row-actions">
+            <button type="button" :aria-label="`编辑 ${row.name}`" :title="`编辑 ${row.name}`" @click="$emit('edit', row.id)">
+              <Edit24Regular aria-hidden="true" />
+            </button>
+            <button type="button" class="is-danger" :aria-label="`删除 ${row.name}`" :title="`删除 ${row.name}`" @click="$emit('delete', row.id)">
+              <Delete24Regular aria-hidden="true" />
+            </button>
+          </span>
+        </footer>
+      </article>
+    </div>
   </ProxyInventoryShell>
 </template>
 
 <style scoped>
 .proxy-table-wrap { min-width: 0; }
+.proxy-mobile-list { display: none; }
 .proxy-probe-toolbar { padding: 8px 16px; display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; border-bottom: 1px solid var(--ui-border); color: var(--ui-text-muted); font-size: var(--ui-font-body-sm); }
 .proxy-probe-toolbar :deep(.el-checkbox) { min-height: 44px; margin-right: 0; }
 .proxy-probe-toolbar :deep(.el-checkbox__label) { color: var(--ui-text); }
@@ -179,5 +223,30 @@ defineEmits<{
   .proxy-inventory-table tr { grid-template-columns: minmax(0, 1fr); }
   .proxy-inventory-table td:nth-child(odd) { border-right: 0; }
   .proxy-inventory-table td:nth-last-child(2) { border-bottom: 1px solid var(--ui-border-muted) !important; }
+}
+
+@media (max-width: 640px) {
+  .proxy-table-wrap { display: none; }
+  .proxy-mobile-list { padding: 10px; display: grid; gap: 10px; }
+  .proxy-mobile-card { min-width: 0; overflow: hidden; border: 1px solid var(--ui-border); border-radius: var(--ui-radius-lg); background: var(--ui-surface-strong); }
+  .proxy-mobile-card > header { min-height: 58px; padding: 10px 12px; display: flex; align-items: center; justify-content: space-between; gap: 12px; border-bottom: 1px solid var(--ui-border-muted); }
+  .proxy-mobile-card > header div { min-width: 0; }
+  .proxy-mobile-card > header strong,
+  .proxy-mobile-card > header small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .proxy-mobile-card > header strong { color: var(--ui-text); font-size: var(--ui-font-body); }
+  .proxy-mobile-card > header small { margin-top: 3px; color: var(--ui-text-muted); font: var(--ui-font-caption) "v-mono", monospace; }
+  .proxy-mobile-endpoint { margin: 12px 12px 0; display: block; color: var(--ui-text); font: var(--ui-font-body-sm)/1.5 "v-mono", monospace; overflow-wrap: anywhere; }
+  .proxy-mobile-card > .proxy-observation-meta { margin: 3px 12px 10px; }
+  .proxy-mobile-card dl { margin: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); border-block: 1px solid var(--ui-border-muted); }
+  .proxy-mobile-card dl > div { min-width: 0; min-height: 82px; padding: 10px 12px; display: grid; align-content: start; gap: 7px; }
+  .proxy-mobile-card dl > div + div { border-left: 1px solid var(--ui-border-muted); }
+  .proxy-mobile-card dt { color: var(--ui-text-muted); font-size: var(--ui-font-caption); }
+  .proxy-mobile-card dd { min-width: 0; margin: 0; }
+  .proxy-mobile-card dd + code,
+  .proxy-mobile-card dl code { color: var(--ui-text); font: var(--ui-font-caption) "v-mono", monospace; overflow-wrap: anywhere; }
+  .proxy-mobile-card footer { min-height: 56px; padding: 6px 8px 6px 12px; display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+  .proxy-mobile-rule { min-height: 44px; padding: 0 10px; display: inline-flex; align-items: center; gap: 7px; border: 0; border-radius: var(--ui-radius-md); background: color-mix(in srgb, var(--ui-communication) 8%, transparent); color: var(--ui-communication); font-size: var(--ui-font-body-sm); }
+  .proxy-mobile-rule svg { width: 17px; height: 17px; }
+  .proxy-row-actions button { width: 44px; height: 44px; }
 }
 </style>

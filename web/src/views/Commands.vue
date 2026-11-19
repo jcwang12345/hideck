@@ -498,7 +498,7 @@ function updateRulesOpen(open: boolean) {
       :title="dangerousTitle"
       width="min(460px, 92vw)"
       append-to-body
-      @update:model-value="(open) => { if (!open) dangerousDefinition = null }"
+      @update:model-value="(open: boolean) => { if (!open) dangerousDefinition = null }"
     >
       <el-form label-position="top" @submit.prevent="confirmDangerous">
         <el-form-item label="设备" required>
@@ -567,8 +567,21 @@ function updateRulesOpen(open: boolean) {
   .commands-layout { height: auto; min-height: 0; grid-template-columns: minmax(0, 1fr); overflow: visible; }
   .commands-layout :deep(.chat-shell) { height: 690px; min-height: 690px; }
 }
+@media (max-width: 820px) {
+  .commands-page { padding-bottom: calc(12px + env(safe-area-inset-bottom)); }
+  .commands-layout { border-radius: var(--ui-radius-lg); }
+  .commands-layout :deep(.chat-shell) {
+    height: min(720px, calc(100dvh - 178px));
+    min-height: 560px;
+  }
+}
 @media (max-width: 640px) {
   .commands-layout { margin: 0 -4px; }
-  .commands-layout :deep(.chat-shell) { height: 720px; min-height: 720px; }
+  .commands-layout :deep(.chat-shell) {
+    height: 720px;
+    min-height: 720px;
+    height: min(720px, calc(100dvh - 164px));
+    min-height: min(560px, calc(100dvh - 164px));
+  }
 }
 </style>

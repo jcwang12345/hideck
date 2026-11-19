@@ -124,11 +124,16 @@ onUnmounted(() => {
 <template>
   <el-dialog
     :model-value="modelValue"
-    :title="websheet?.title || 'E911地址'"
-    width="min(390px, 94vw)"
+    :title="websheet?.title || '补充 911 紧急地址'"
+    width="min(520px, 96vw)"
+    class="carrier-websheet-dialog"
     destroy-on-close
     @update:model-value="emit('update:modelValue', $event)"
   >
+    <div class="websheet-guidance">
+      <strong>请在运营商页面填写实际使用地址</strong>
+      <span>该地址仅用于紧急呼叫定位；完成后页面会自动返回 HiDeck。</span>
+    </div>
     <div class="websheet-frame-shell relative overflow-hidden rounded-[var(--ui-radius-lg)] border border-[var(--ui-border)]">
       <div v-if="!loaded" class="absolute inset-0 z-10 flex items-center justify-center bg-[color-mix(in_srgb,var(--ui-surface)_82%,transparent)] text-sm text-[var(--ui-muted)]">
         加载中...
@@ -150,9 +155,51 @@ onUnmounted(() => {
   height: min(680px, 78vh);
 }
 
+.websheet-guidance {
+  margin: -4px 0 12px;
+  padding: 11px 13px;
+  display: grid;
+  gap: 3px;
+  border: 1px solid color-mix(in srgb, var(--ui-warning) 34%, var(--ui-border));
+  border-radius: var(--ui-radius-md);
+  background: color-mix(in srgb, var(--ui-warning) 8%, var(--ui-surface));
+}
+
+.websheet-guidance strong {
+  color: var(--ui-text);
+  font-size: 14px;
+}
+
+.websheet-guidance span {
+  color: var(--ui-text-muted);
+  font-size: var(--ui-font-body-sm);
+  line-height: 1.5;
+}
+
 @media (max-width: 640px) {
+  :deep(.carrier-websheet-dialog) {
+    width: 100% !important;
+    max-width: none;
+    height: 100dvh;
+    margin: 0;
+    border-radius: 0;
+  }
+
+  :deep(.carrier-websheet-dialog .el-dialog__header) {
+    padding: calc(15px + env(safe-area-inset-top)) 16px 12px;
+  }
+
+  :deep(.carrier-websheet-dialog .el-dialog__body) {
+    height: calc(100dvh - 64px - env(safe-area-inset-top));
+    padding: 10px 12px calc(12px + env(safe-area-inset-bottom));
+    display: flex;
+    flex-direction: column;
+  }
+
   .websheet-frame-shell {
-    height: min(620px, calc(100vh - 140px));
+    min-height: 0;
+    height: auto;
+    flex: 1 1 auto;
   }
 }
 </style>

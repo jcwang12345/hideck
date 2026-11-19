@@ -159,15 +159,15 @@ function selectFromKeyboard(event: KeyboardEvent, task: AutomaticTask) {
 
 <style scoped>
 .task-list-region { min-width: 0; padding: 16px; }
-.task-summary { min-height: 36px; padding: 0 4px 12px; display: flex; align-items: center; flex-wrap: wrap; gap: 10px; color: var(--ui-text-muted); font-size: var(--ui-font-body-sm); }
+.task-summary { min-height: 44px; padding: 0 4px 12px; display: flex; align-items: center; flex-wrap: wrap; gap: 10px; color: var(--ui-text-muted); font-size: var(--ui-font-body-sm); }
 .task-summary span { white-space: nowrap; }
 .task-summary b, .task-summary strong { color: var(--ui-text); font-weight: 550; }
 .task-summary i { width: 3px; height: 3px; border-radius: 50%; background: var(--ui-muted); }
 .task-state { min-height: 220px; border: 1px solid var(--ui-border); border-radius: var(--ui-radius-lg); background: linear-gradient(145deg, color-mix(in srgb, var(--ui-primary) 4%, transparent), transparent 42%), var(--ui-surface); color: var(--ui-text-muted); display: grid; place-items: center; align-content: center; gap: 8px; font-size: var(--ui-font-body); text-align: center; }
 .task-state strong { color: var(--ui-text); }
 .task-error { min-height: 72px; margin-bottom: 10px; padding: 12px; border-color: color-mix(in srgb, var(--ui-danger) 38%, var(--ui-border)); color: var(--ui-danger); grid-template-columns: minmax(0, 1fr) auto; text-align: left; }
-.task-table { min-width: 900px; border: 1px solid var(--ui-border); border-radius: var(--ui-radius-lg); background: var(--ui-surface); overflow: hidden; }
-.task-row { display: grid; grid-template-columns: minmax(130px, 1.15fr) minmax(130px, 1.05fr) minmax(105px, .85fr) minmax(132px, 1fr) minmax(118px, .9fr) minmax(90px, .7fr) 68px 176px; }
+.task-table { min-width: 920px; border: 1px solid var(--ui-border); border-radius: var(--ui-radius-md); background: color-mix(in srgb, var(--ui-surface) 88%, transparent); overflow: hidden; }
+.task-row { display: grid; grid-template-columns: minmax(130px, 1.15fr) minmax(130px, 1.05fr) minmax(105px, .85fr) minmax(132px, 1fr) minmax(118px, .9fr) minmax(90px, .7fr) 68px 192px; }
 .task-table-head { min-height: 42px; align-items: center; border-bottom: 1px solid var(--ui-border); background: color-mix(in srgb, var(--ui-surface-muted) 40%, transparent); color: var(--ui-muted); font-size: var(--ui-font-caption); }
 .task-table-head > span { padding: 10px; }
 .task-item { position: relative; min-height: 84px; border-bottom: 1px solid var(--ui-border); color: var(--ui-text-muted); cursor: pointer; transition: background-color 160ms ease, box-shadow 160ms ease, transform 160ms var(--ui-ease-out); }
@@ -191,7 +191,7 @@ function selectFromKeyboard(event: KeyboardEvent, task: AutomaticTask) {
 .tone-danger { color: var(--ui-danger); }
 .task-toggle { align-items: center; }
 .task-actions { padding-inline: 4px; flex-direction: row; align-items: center; gap: 0; }
-.task-actions :deep(.el-button) { width: 40px; height: 40px; margin: 0; padding: 0; }
+.task-actions :deep(.el-button) { width: 44px; height: 44px; margin: 0; padding: 0; }
 @media (hover: hover) and (pointer: fine) {
   .task-item:hover:not(.selected) { background: color-mix(in srgb, var(--ui-text) 2%, transparent); }
 }
@@ -210,7 +210,7 @@ function selectFromKeyboard(event: KeyboardEvent, task: AutomaticTask) {
   .task-cell:nth-child(2), .task-cell:nth-child(3), .task-cell:nth-child(4), .task-cell:nth-child(5), .task-cell:nth-child(6) { grid-column: 1; margin-top: 12px; }
   .task-toggle { grid-column: 2; grid-row: 1; align-self: start; }
   .task-toggle :deep(.el-switch) { min-width: 44px; min-height: 44px; justify-content: center; }
-  .task-actions { grid-column: 2; grid-row: 2 / span 5; align-self: end; display: grid; grid-template-columns: 44px 44px; }
+  .task-actions { grid-column: 1 / -1; grid-row: auto; align-self: end; margin-top: 12px; padding-top: 10px; display: grid; grid-template-columns: repeat(4, 44px); justify-content: end; border-top: 1px solid var(--ui-border); }
   .task-actions :deep(.el-button) { width: 44px; height: 44px; }
   .task-cell b, .task-cell small { white-space: normal; overflow-wrap: anywhere; }
 }

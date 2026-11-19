@@ -251,7 +251,7 @@ const secondaryStatus = (d: DeviceMgmtListItem) => {
 }
 
 .device-list-button {
-  min-height: 82px;
+  min-height: 78px;
   padding: 11px 10px;
   border: 1px solid transparent;
   border-radius: var(--ui-radius-lg);
@@ -317,7 +317,44 @@ const secondaryStatus = (d: DeviceMgmtListItem) => {
   }
 
   .device-list-scroll {
-    max-height: 330px;
+    max-height: none;
+    overflow-x: auto;
+    overflow-y: hidden;
+    scroll-snap-type: x proximity;
+    scrollbar-width: none;
+  }
+
+  .device-list-grid {
+    grid-auto-columns: minmax(230px, 72vw);
+    grid-auto-flow: column;
+    grid-template-columns: none;
+  }
+
+  .device-list-item {
+    scroll-snap-align: start;
+  }
+}
+
+@media (max-width: 520px) {
+  .device-rail-header {
+    min-height: 62px;
+    padding: 12px;
+  }
+
+  .device-rail-search {
+    padding: 10px 10px 7px;
+  }
+
+  .device-rail-filters {
+    padding: 0 10px 9px;
+  }
+
+  .device-quota {
+    display: none;
+  }
+
+  .device-rail-list {
+    padding: 3px 8px 10px;
   }
 }
 </style>

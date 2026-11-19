@@ -116,8 +116,8 @@ watch(
   min-width: 0;
   padding: 16px;
   border: 1px solid var(--ui-border);
-  border-radius: var(--ui-radius-xl);
-  background: var(--ui-surface-muted);
+  border-radius: var(--ui-radius-lg);
+  background: color-mix(in srgb, var(--ui-surface-muted) 74%, var(--ui-surface));
 }
 
 .qr-connect__header,
@@ -226,7 +226,16 @@ watch(
   background: color-mix(in srgb, var(--ui-warning) 12%, var(--ui-surface));
 }
 
+.qr-connect__actions :deep(.el-button),
+.qr-connect__open :deep(.el-button) {
+  min-height: 44px;
+}
+
 @media (max-width: 640px) {
+  .qr-connect {
+    padding: 14px;
+  }
+
   .qr-connect__header {
     align-items: stretch;
     flex-direction: column;

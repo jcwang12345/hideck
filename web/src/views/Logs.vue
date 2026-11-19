@@ -198,37 +198,39 @@ watch(levelFilter, () => {
           <div><span>SYSTEM OUTPUT</span><strong>运行时输出</strong></div>
           <div class="log-console-actions">
             <small>{{ paused ? 'PAUSED' : 'FOLLOWING' }}</small>
-            <el-button size="small" @click="togglePause" :type="paused ? 'success' : 'warning'" class="!border-0">
+            <el-button size="small" :aria-label="paused ? '继续日志流' : '暂停日志流'" @click="togglePause" :type="paused ? 'success' : 'warning'" class="!border-0">
               <el-icon><component :is="paused ? Play24Regular : Pause24Regular" /></el-icon>
-              {{ paused ? '继续' : '暂停' }}
+              <span class="action-label">{{ paused ? '继续' : '暂停' }}</span>
             </el-button>
-            <el-button size="small" @click="exportLogs" type="primary" class="!border-0">
+            <el-button size="small" aria-label="导出筛选后的日志" @click="exportLogs" type="primary" class="!border-0">
               <el-icon><ArrowDownload24Regular /></el-icon>
-              导出
+              <span class="action-label">导出</span>
             </el-button>
-            <el-button size="small" @click="clearLogs" class="log-console-btn-ghost !border-0">
+            <el-button size="small" aria-label="清空日志" @click="clearLogs" class="log-console-btn-ghost !border-0">
               <el-icon><Delete24Regular /></el-icon>
-              清空
+              <span class="action-label">清空</span>
             </el-button>
           </div>
         </header>
       <div
         ref="logContainer"
-        class="log-console h-[calc(100dvh-150px)] min-h-[470px] overflow-auto font-mono text-sm p-4"
+        class="log-console"
       >
-        <div v-if="filteredLogs.length === 0" class="log-empty text-center py-8">
+        <div v-if="filteredLogs.length === 0" class="log-empty">
           {{ connected ? '等待日志...' : '未连接到日志流' }}
         </div>
         <div
           v-for="(log, idx) in filteredLogs"
           :key="idx"
-          class="log-row py-0.5 px-2 -mx-2 whitespace-nowrap"
+          class="log-row"
         >
           <span class="log-time">[{{ formatDateTime(log.time) }}]</span>
-          <span class="font-bold ml-1 inline-block w-14" :class="getLevelClass(log.level)">{{ log.level.toUpperCase().padEnd(5) }}</span>
-          <span class="log-caller inline-block w-48 truncate align-bottom" :title="log.caller">{{ log.caller }}</span>
-          <span class="log-message ml-1">{{ log.message }}</span>
-          <span v-if="log.fields" class="log-fields ml-1">{{ log.fields }}</span>
+          <span class="log-level" :class="getLevelClass(log.level)">{{ log.level.toUpperCase().padEnd(5) }}</span>
+          <span class="log-caller" :title="log.caller">{{ log.caller }}</span>
+          <span class="log-payload">
+            <span class="log-message">{{ log.message }}</span>
+            <span v-if="log.fields" class="log-fields">{{ log.fields }}</span>
+          </span>
         </div>
       </div>
       </section>
@@ -238,8 +240,10 @@ watch(levelFilter, () => {
 
 <style scoped>
 .logs-workspace {
+  height: calc(100dvh - 112px);
+  min-height: 540px;
   display: grid;
-  grid-template-columns: 250px minmax(0, 1fr);
+  grid-template-columns: 232px minmax(0, 1fr);
   align-items: stretch;
   overflow: hidden;
   animation: logs-workspace-enter 240ms var(--ui-ease-out) both;
@@ -347,6 +351,11 @@ watch(levelFilter, () => {
   gap: 7px !important;
 }
 
+.log-console-actions :deep(.el-button) {
+  min-height: 36px;
+  margin: 0;
+}
+
 .log-console-actions :deep(.log-console-btn-ghost) {
   --el-button-text-color: var(--ui-console-text);
   --el-button-bg-color: color-mix(in srgb, var(--ui-console-text) 14%, transparent);
@@ -378,15 +387,31 @@ watch(levelFilter, () => {
 
 .log-frame {
   min-width: 0;
+  min-height: 0;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
 }
 
 .log-console {
+  min-width: 0;
+  min-height: 0;
+  padding: 12px 14px;
+  overflow: auto;
   background:
     linear-gradient(90deg, color-mix(in srgb, var(--ui-accent) 6%, transparent) 1px, transparent 1px),
     var(--ui-console);
   background-size: 36px 100%;
   color: var(--ui-console-text);
+  font-family: "v-mono", ui-monospace, monospace;
+  font-size: 12px;
   font-variant-numeric: tabular-nums;
+}
+
+.log-empty {
+  min-height: 240px;
+  display: grid;
+  place-items: center;
+  text-align: center;
 }
 
 .log-empty,
@@ -413,9 +438,20 @@ watch(levelFilter, () => {
 .log-level-fatal { color: var(--ui-danger); }
 
 .log-row {
+  min-width: 0;
+  padding: 4px 8px;
+  display: grid;
+  grid-template-columns: 166px 54px 180px minmax(220px, 1fr);
+  align-items: start;
+  gap: 8px;
   border-left: 2px solid transparent;
-  border-radius: 2px;
+  border-radius: 3px;
+  line-height: 1.45;
 }
+
+.log-level { font-weight: 700; }
+.log-caller { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.log-payload { min-width: 0; display: flex; flex-wrap: wrap; gap: 0 7px; white-space: pre-wrap; overflow-wrap: anywhere; }
 
 .log-row:hover {
   border-left-color: var(--ui-accent);
@@ -438,20 +474,66 @@ watch(levelFilter, () => {
   }
 }
 
-@media (max-width: 640px) {
+@media (max-width: 820px) {
+  .logs-page { padding-bottom: calc(12px + env(safe-area-inset-bottom)); }
   .logs-workspace {
+    height: auto;
+    min-height: 0;
     grid-template-columns: minmax(0, 1fr);
+    border-radius: var(--ui-radius-lg);
   }
 
   .logs-control-rail {
     min-height: 0;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
     border-right: 0;
     border-bottom: 1px solid var(--ui-border);
   }
 
-  .log-console {
-    height: calc(100dvh - 360px);
-    min-height: 360px;
+  .logs-rail-status { min-height: 72px; border-bottom: 0; }
+  .logs-rail-count { min-width: 112px; padding: 12px 16px; border-bottom: 0; border-left: 1px solid var(--ui-border); }
+  .logs-rail-count strong { font-size: 25px; }
+  .logs-rail-error { grid-column: 1 / -1; }
+  .logs-rail-filters { grid-column: 1 / -1; grid-template-columns: 112px minmax(0, 1fr) auto auto; align-items: center; border-top: 1px solid var(--ui-border); }
+  .logs-rail-filters > label { display: none; }
+  .logs-rail-filters :deep(.el-select) { width: 100%; }
+
+  .log-frame { height: min(68dvh, 680px); min-height: 460px; }
+}
+
+@media (max-width: 640px) {
+  .logs-rail-status { padding: 14px 12px; }
+  .logs-rail-count { padding-inline: 12px; }
+  .logs-rail-filters { padding: 10px 12px; grid-template-columns: 112px minmax(0, 1fr); }
+  .logs-rail-filter-count,
+  .logs-rail-filters :deep(.el-checkbox) { min-height: 36px; display: flex; align-items: center; }
+
+  .log-console-header { height: 58px; padding: 0 10px 0 12px; }
+  .log-console-header > div:first-child span { font-size: 10px; }
+  .log-console-header > div:first-child strong { font-size: 14px; }
+  .log-console-header small { display: none; }
+  .log-console-actions { gap: 4px !important; }
+  .log-console-actions :deep(.el-button) { width: 40px; min-height: 40px; padding: 0; }
+  .log-console-actions .action-label { display: none; }
+  .log-console { padding: 8px; font-size: 11px; }
+  .log-row {
+    margin-bottom: 6px;
+    padding: 8px 9px;
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas: "time level" "caller caller" "payload payload";
+    gap: 3px 8px;
+    border: 1px solid color-mix(in srgb, var(--ui-console-text) 10%, transparent);
+    border-left: 2px solid transparent;
+    border-radius: var(--ui-radius-sm);
+    background: color-mix(in srgb, var(--ui-console-text) 3%, transparent);
   }
+  .log-row:hover { border-left-color: var(--ui-accent); }
+  .log-time { grid-area: time; }
+  .log-level { grid-area: level; justify-self: end; }
+  .log-caller { grid-area: caller; color: var(--ui-communication); }
+  .log-payload { grid-area: payload; padding-top: 3px; }
+
+  .log-frame { height: min(65dvh, 620px); min-height: 440px; }
 }
 </style>

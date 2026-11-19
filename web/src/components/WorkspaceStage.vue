@@ -44,75 +44,36 @@ withDefaults(defineProps<{
 <style scoped>
 .workspace-stage {
   position: relative;
-  min-height: 260px;
+  min-height: 0;
   margin-bottom: 16px;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 320px;
+  grid-template-columns: minmax(0, 1fr) minmax(320px, 38%);
   overflow: hidden;
   border: 1px solid var(--ui-border);
-  border-radius: var(--ui-radius-xl);
-  background:
-    radial-gradient(circle at 61% 54%, color-mix(in srgb, var(--ui-primary) 13%, transparent), transparent 27%),
-    linear-gradient(125deg, var(--ui-surface) 0 54%, color-mix(in srgb, var(--ui-surface) 88%, var(--ui-nav)));
+  border-radius: var(--ui-radius-lg);
+  background: var(--ui-surface);
   animation: workspace-stage-enter 240ms var(--ui-ease-out) both;
-}
-
-.workspace-stage::before,
-.workspace-stage::after {
-  position: absolute;
-  pointer-events: none;
-  content: "";
-}
-
-.workspace-stage::before {
-  inset: 12% 24% 5% 39%;
-  opacity: .36;
-  background-image: radial-gradient(circle, color-mix(in srgb, var(--ui-primary) 52%, transparent) 1px, transparent 1.3px);
-  background-size: 18px 18px;
-  mask-image: radial-gradient(ellipse, #000 0 27%, transparent 72%);
-}
-
-.workspace-stage::after {
-  top: 58%;
-  left: 41%;
-  width: 33%;
-  height: 1px;
-  background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--ui-primary) 45%, transparent), transparent);
-  box-shadow: 0 -34px 0 color-mix(in srgb, var(--ui-primary) 8%, transparent), 0 34px 0 color-mix(in srgb, var(--ui-primary) 8%, transparent);
 }
 
 .workspace-stage-main,
 .workspace-stage-aside {
   position: relative;
-  z-index: 1;
 }
 
 .workspace-stage.is-compact {
-  min-height: 154px;
+  min-height: 0;
   grid-template-columns: minmax(0, 1fr) minmax(390px, 38%);
   border-radius: var(--ui-radius-lg);
 }
 
-.workspace-stage.is-compact::before {
-  inset: 4% 22% 0 48%;
-  opacity: .28;
-  background-size: 15px 15px;
-}
-
-.workspace-stage.is-compact::after {
-  top: 56%;
-  left: 50%;
-  width: 23%;
-}
-
 .workspace-stage.is-compact .workspace-stage-main {
-  padding: 17px 24px;
+  padding: 20px 24px;
 }
 
 .workspace-stage.is-compact h1 {
-  margin-top: 11px;
-  font-size: clamp(27px, 3vw, 38px);
-  letter-spacing: -.03em;
+  margin-top: 9px;
+  font-size: var(--ui-font-page-title);
+  letter-spacing: -.02em;
 }
 
 .workspace-stage.is-compact p {
@@ -121,11 +82,11 @@ withDefaults(defineProps<{
 }
 
 .workspace-stage.is-compact .workspace-stage-content {
-  padding-top: 13px;
+  padding-top: 16px;
 }
 
 .workspace-stage.is-compact .workspace-stage-aside {
-  padding: 16px 20px;
+  padding: 18px 20px;
 }
 
 .workspace-stage.is-compact :deep(.workspace-stage-stats) {
@@ -133,7 +94,7 @@ withDefaults(defineProps<{
 }
 
 .workspace-stage.is-compact :deep(.workspace-stage-stats > div) {
-  padding: 2px 12px;
+  padding: 2px 14px;
   border-right: 1px solid var(--ui-border);
   border-bottom: 0;
 }
@@ -152,13 +113,13 @@ withDefaults(defineProps<{
 }
 
 .workspace-stage.is-compact :deep(.workspace-stage-pill) {
-  min-height: 29px;
+  min-height: 32px;
   padding: 0 10px;
 }
 
 .workspace-stage-main {
   min-width: 0;
-  padding: 28px clamp(28px, 4vw, 48px);
+  padding: 24px;
   display: flex;
   flex-direction: column;
 }
@@ -184,8 +145,8 @@ withDefaults(defineProps<{
 
 .workspace-stage-kicker {
   color: var(--ui-primary);
-  font: 700 9px "v-mono", monospace;
-  letter-spacing: .14em;
+  font: 600 var(--ui-font-caption)/1.2 var(--ui-font-mono);
+  letter-spacing: .12em;
 }
 
 .workspace-stage-status {
@@ -193,7 +154,7 @@ withDefaults(defineProps<{
   align-items: center;
   gap: 6px;
   color: var(--ui-text-muted);
-  font-size: 11px;
+  font-size: var(--ui-font-caption);
 }
 
 .workspace-stage-status::before {
@@ -210,13 +171,13 @@ withDefaults(defineProps<{
 .workspace-stage-status.is-danger { color: var(--ui-danger); }
 
 .workspace-stage h1 {
-  margin: 30px 0 0;
+  margin: 12px 0 0;
   overflow: hidden;
   color: var(--ui-text);
-  font-size: clamp(40px, 4.8vw, 68px);
-  font-weight: 520;
-  letter-spacing: -.045em;
-  line-height: .98;
+  font-size: var(--ui-font-page-title);
+  font-weight: 600;
+  letter-spacing: -.02em;
+  line-height: 1.2;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -229,17 +190,16 @@ withDefaults(defineProps<{
 }
 
 .workspace-stage-content {
-  margin-top: auto;
-  padding-top: 28px;
+  padding-top: 18px;
 }
 
 .workspace-stage-aside {
-  padding: 28px 32px;
+  padding: 20px 24px;
   display: flex;
   flex-direction: column;
   justify-content: center;
   border-left: 1px solid var(--ui-border);
-  background: color-mix(in srgb, var(--ui-surface) 86%, transparent);
+  background: color-mix(in srgb, var(--ui-surface-muted) 68%, var(--ui-surface));
 }
 
 :deep(.workspace-stage-pills) {
@@ -259,7 +219,7 @@ withDefaults(defineProps<{
   border-radius: var(--ui-radius-md);
   background: color-mix(in srgb, var(--ui-surface-strong) 84%, transparent);
   color: var(--ui-text-muted);
-  font-size: 11px;
+  font-size: var(--ui-font-caption);
 }
 
 :deep(.workspace-stage-pill strong) {
@@ -287,7 +247,7 @@ withDefaults(defineProps<{
 
 :deep(.workspace-stage-stats dt) {
   color: var(--ui-text-muted);
-  font-size: 10px;
+  font-size: var(--ui-font-caption);
 }
 
 :deep(.workspace-stage-stats dd) {
@@ -340,7 +300,7 @@ withDefaults(defineProps<{
   }
 
   .workspace-stage-main {
-    padding: 22px 20px;
+    padding: 18px 16px;
   }
 
   .workspace-stage-header {
@@ -354,18 +314,40 @@ withDefaults(defineProps<{
   }
 
   .workspace-stage h1 {
-    margin-top: 24px;
-    font-size: 38px;
+    margin-top: 10px;
+    font-size: 22px;
+  }
+
+  .workspace-stage p {
+    line-height: 1.55;
+  }
+
+  .workspace-stage-aside,
+  .workspace-stage.is-compact .workspace-stage-aside {
+    padding: 14px 16px;
   }
 
   :deep(.workspace-stage-stats) {
-    grid-template-columns: minmax(0, 1fr);
+    grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 
   :deep(.workspace-stage-stats > div) {
-    padding: 10px 0;
+    padding: 2px 10px;
+    border-right: 1px solid var(--ui-border);
+    border-bottom: 0;
+  }
+
+  :deep(.workspace-stage-stats > div:first-child) {
+    padding-left: 0;
+  }
+
+  :deep(.workspace-stage-stats > div:last-child) {
+    padding-right: 0;
     border-right: 0;
-    border-bottom: 1px solid var(--ui-border);
+  }
+
+  :deep(.workspace-stage-stats dd) {
+    font-size: var(--ui-font-caption);
   }
 }
 

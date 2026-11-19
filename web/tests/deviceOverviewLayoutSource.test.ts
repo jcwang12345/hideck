@@ -74,6 +74,10 @@ test('a newly detected E911-capable card opens the carrier address page once', (
   assert.match(devicesView, /wasE911PromptShown\(browserE911PromptStorage\(\), promptKey\)/)
   assert.match(devicesView, /openE911Websheet\(\{ automatic: true \}\)/)
   assert.match(devicesView, /markE911PromptShown\(browserE911PromptStorage\(\), promptKey\)/)
+  assert.match(devicesView, /class="mobile-e911-shortcut"/)
+  assert.match(devicesView, /本卡需要设置 911 紧急地址/)
+  assert.match(devicesView, /@click="\(\) => openE911Websheet\(\)"/)
+  assert.match(devicesView, /@media \(max-width: 760px\)[\s\S]*\.mobile-e911-shortcut \{[\s\S]*display: grid;/)
 })
 
 test('cellular signal panel hides invalid modem sentinel values', () => {

@@ -29,7 +29,7 @@ const emit = defineEmits<{
         <el-icon><ArrowLeft24Regular /></el-icon>
       </button>
       <div class="sms-conversation-copy">
-        <strong>{{ peer || '请选择会话' }}</strong>
+        <strong :title="peer || undefined">{{ peer || '请选择会话' }}</strong>
         <span>{{ context.deviceLabel }} · {{ context.operatorLabel }}</span>
       </div>
     </div>
@@ -76,7 +76,7 @@ const emit = defineEmits<{
 .sms-context-and-actions { min-width: 0; gap: 14px; }
 .sms-runtime-facts { gap: 6px; }
 .sms-context-and-actions nav { flex: none; gap: 4px; }
-.sms-conversation-copy { min-width: 0; }
+.sms-conversation-copy { min-width: 0; min-height: 38px; }
 
 .sms-conversation-copy strong,
 .sms-conversation-copy span { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -124,6 +124,7 @@ const emit = defineEmits<{
   .sms-conversation-header { padding-inline: 8px; }
   .sms-header-icon { width: 44px; height: 44px; }
   .sms-context-and-actions nav { gap: 0; }
-  .sms-conversation-copy span { max-width: 130px; }
+  .sms-conversation-copy { max-width: min(42vw, 170px); }
+  .sms-conversation-copy span { max-width: 100%; }
 }
 </style>

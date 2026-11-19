@@ -43,6 +43,7 @@ const callee = ref('')
 const action = ref('')
 const keypadVisible = ref(false)
 const lastDTMF = ref('')
+const mobileSetupOpen = ref(false)
 
 const call = computed(() => phone.currentCall)
 const callEnding = computed(() => call.value ? phone.isCallEnding(call.value.call_id) : false)
@@ -413,7 +414,7 @@ async function sendDTMF(digit: string) {
 
 <template>
   <div class="app-page phone-page">
-    <PageHeader :title="t('phone.title')" :subtitle="t('phone.subtitle')">
+    <PageHeader class="phone-page-header" :title="t('phone.title')" :subtitle="t('phone.subtitle')">
       <template #actions>
         <PhoneMcpConnection />
         <span class="media-state" :class="`is-${phone.mediaState}`">
@@ -441,12 +442,26 @@ async function sendDTMF(digit: string) {
       <div class="phone-grid">
       <section class="phone-console" aria-labelledby="phone-console-title">
         <header class="console-header">
-          <div>
+          <div class="console-heading">
             <span>WEBRTC HANDSET</span>
             <h2 id="phone-console-title">{{ call ? '当前电话' : '拨号' }}</h2>
+            <p>{{ call ? phoneCallStatusLabel(call, callEnding) : '选择线路并输入号码' }}</p>
           </div>
           <div class="device-selector">
-            <label for="phone-device">语音设备</label>
+            <div class="device-selector-heading">
+              <label for="phone-device">语音设备</label>
+              <button
+                v-if="selectedDevice"
+                type="button"
+                class="phone-setup-toggle"
+                :aria-expanded="mobileSetupOpen"
+                aria-controls="phone-mode-settings"
+                @click="mobileSetupOpen = !mobileSetupOpen"
+              >
+                <span>{{ deviceModeLabel(selected) }}</span>
+                {{ mobileSetupOpen ? '收起设置' : '通话设置' }}
+              </button>
+            </div>
             <el-select
               id="phone-device"
               v-model="selectedDevice"
@@ -465,7 +480,12 @@ async function sendDTMF(digit: string) {
                 :disabled="isDeviceBusy(device)"
               />
             </el-select>
-            <div v-if="selectedDevice" class="phone-mode-bar">
+            <div
+              v-if="selectedDevice"
+              id="phone-mode-settings"
+              class="phone-mode-bar"
+              :class="{ 'is-mobile-open': mobileSetupOpen }"
+            >
               <el-radio-group
                 :model-value="selectedMode"
                 size="small"

@@ -665,4 +665,9 @@ usePollingScheduler(() => fetchUpstream({ silent: true }), upstreamProbeInterval
     transform: none;
   }
 }
+
+@media (max-width: 820px) {
+  .proxy-page { padding-bottom: calc(12px + env(safe-area-inset-bottom)); }
+  .proxy-workspace { border-radius: var(--ui-radius-lg); }
+}
 </style>

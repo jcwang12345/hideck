@@ -48,12 +48,13 @@ async function check() {
 
 <style scoped>
 .mcp-diagnostics { margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--ui-border); }
-.diagnostic-result { margin-top: 12px; overflow-wrap: anywhere; font-size: 13px; line-height: 1.6; }
+.diagnostic-result { margin-top: 12px; padding: 14px; overflow-wrap: anywhere; border: 1px solid var(--ui-border); border-radius: var(--ui-radius-md); background: var(--ui-surface-muted); font-size: 13px; line-height: 1.6; }
 .diagnostic-result p + p { margin-top: 8px; }
 .diagnostic-detail { color: var(--ui-text-muted); }
 .diagnostic-error { margin-top: 12px; color: var(--el-color-danger); }
 .diagnostic-tokens { display: grid; gap: 12px; margin: 12px 0; list-style: none; }
 .diagnostic-tokens li { display: grid; gap: 4px; }
 .diagnostic-tokens span { color: var(--ui-text-muted); }
-@media (max-width: 640px) { .mcp-diagnostics :deep(.el-button) { min-height: 44px; } }
+.mcp-diagnostics :deep(.el-button) { min-height: 44px; }
+@media (max-width: 640px) { .mcp-diagnostics :deep(.el-button) { width: 100%; min-height: 44px; } }
 </style>

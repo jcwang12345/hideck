@@ -4,8 +4,10 @@
 
 :root {
   color-scheme: light;
-  font-family: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+  font-family: "v-sans", -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
   font-synthesis: none;
+  --ui-font-sans: "v-sans", -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+  --ui-font-mono: "v-mono", "SFMono-Regular", Consolas, "Liberation Mono", monospace;
   --ui-bg: #FBF9F6;
   --ui-nav: #FFFFFF;
   --ui-nav-surface: #FFFFFF;
@@ -43,18 +45,25 @@
   --ui-font-title: 16px;
   --ui-font-section: 20px;
   --ui-font-page-title: 24px;
-  --ui-font-weight-body: 500;
-  --ui-font-weight-title: 700;
-  --ui-radius-sm: 16px;
-  --ui-radius-md: 20px;
-  --ui-radius-lg: 24px;
-  --ui-radius-xl: 24px;
-  --ui-radius-input: 16px;
-  --ui-radius-nav: 12px;
+  --ui-font-weight-body: 400;
+  --ui-font-weight-title: 600;
+  --ui-radius-sm: 6px;
+  --ui-radius-md: 8px;
+  --ui-radius-lg: 10px;
+  --ui-radius-xl: 12px;
+  --ui-radius-input: 8px;
+  --ui-radius-nav: 8px;
   --ui-radius-pill: 999px;
-  --ui-shadow-sm: none;
-  --ui-shadow-md: none;
-  --ui-shadow-lg: 0 10px 28px rgba(11, 53, 88, 0.06);
+  --ui-space-1: 4px;
+  --ui-space-2: 8px;
+  --ui-space-3: 12px;
+  --ui-space-4: 16px;
+  --ui-space-5: 20px;
+  --ui-space-6: 24px;
+  --ui-shell-topbar-height: 56px;
+  --ui-shadow-sm: 0 1px 2px rgba(11, 53, 88, 0.04);
+  --ui-shadow-md: 0 4px 14px rgba(11, 53, 88, 0.06);
+  --ui-shadow-lg: 0 12px 32px rgba(11, 53, 88, 0.08);
   --ui-backdrop: none;
   --ui-focus: 0 0 0 3px rgba(0, 107, 255, 0.18);
   --ui-ease-out: cubic-bezier(0.23, 1, 0.32, 1);
@@ -88,10 +97,10 @@
   --el-color-danger-light-8: #F0CBC8;
   --el-color-danger-light-9: #FDECEC;
   --el-color-danger-dark-2: #8F1C13;
-  --el-border-radius-base: 16px;
-  --el-border-radius-small: 16px;
-  --el-border-radius-round: 16px;
-  --el-input-border-radius: 16px;
+  --el-border-radius-base: 8px;
+  --el-border-radius-small: 6px;
+  --el-border-radius-round: 10px;
+  --el-input-border-radius: 8px;
   --el-border-color: var(--ui-border);
   --el-border-color-light: var(--ui-border-muted);
   --el-fill-color-light: var(--ui-surface-muted);
@@ -134,9 +143,9 @@ html.dark {
   --ui-warning-surface: #2A2210;
   --ui-danger: #D6453D;
   --ui-danger-surface: #2C1616;
-  --ui-shadow-sm: 0 1px 0 rgba(255, 255, 255, 0.04);
-  --ui-shadow-md: 0 8px 24px rgba(0, 0, 0, 0.28);
-  --ui-shadow-lg: 0 18px 44px rgba(0, 0, 0, 0.36);
+  --ui-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.18);
+  --ui-shadow-md: 0 4px 14px rgba(0, 0, 0, 0.22);
+  --ui-shadow-lg: 0 12px 32px rgba(0, 0, 0, 0.28);
   --ui-focus: 0 0 0 3px rgba(0, 107, 255, 0.28);
   --el-color-primary: #0B3558;
   --el-color-primary-light-3: #1A4E7A;
@@ -194,9 +203,9 @@ html.classic {
   --ui-warning-surface: #3a2c12;
   --ui-danger: #ef646a;
   --ui-danger-surface: #3a1719;
-  --ui-shadow-sm: 0 1px 0 rgba(255, 255, 255, 0.035) inset, 0 20px 54px rgba(0, 0, 0, 0.18);
-  --ui-shadow-md: 0 1px 0 rgba(255, 255, 255, 0.08) inset, 0 28px 80px rgba(0, 0, 0, 0.42);
-  --ui-shadow-lg: 0 18px 44px rgba(4, 20, 24, 0.18);
+  --ui-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.18);
+  --ui-shadow-md: 0 4px 14px rgba(0, 0, 0, 0.24);
+  --ui-shadow-lg: 0 12px 32px rgba(0, 0, 0, 0.3);
   --ui-focus: 0 0 0 3px rgba(102, 233, 173, 0.2);
   --el-color-primary: #1a8b62;
   --el-color-primary-light-3: #2f9f98;
@@ -235,7 +244,8 @@ body {
   background: var(--ui-bg);
   color: var(--ui-text);
   font-size: 14px;
-  font-weight: 500;
+  font-family: var(--ui-font-sans);
+  font-weight: 400;
   line-height: 1.5;
   letter-spacing: 0;
   -webkit-font-smoothing: antialiased;
@@ -243,7 +253,7 @@ body {
 }
 
 h1, h2, h3, h4 {
-  font-weight: 700;
+  font-weight: 600;
 }
 
 html.dark body {
@@ -389,7 +399,7 @@ html.classic .ui-workspace-glow::before {
 }
 
 .ui-status-value {
-  font-family: "v-mono", ui-monospace, monospace;
+  font-family: var(--ui-font-mono);
   font-variant-numeric: tabular-nums;
 }
 
@@ -482,7 +492,7 @@ html.dark .el-table td.el-table__cell {
 
 .el-button {
   min-height: 36px;
-  border-radius: var(--ui-radius-pill);
+  border-radius: var(--ui-radius-md);
   box-shadow: none;
   font-weight: 500;
   transition: background-color 160ms ease, border-color 160ms ease, color 160ms ease, transform 140ms var(--ui-ease-out);
@@ -511,19 +521,19 @@ html.dark .el-table td.el-table__cell {
 .el-select,
 .el-input-number,
 .el-date-editor {
-  --el-input-border-radius: 16px;
+  --el-input-border-radius: var(--ui-radius-input);
 }
 
 .el-input__wrapper,
 .el-select__wrapper,
 .el-input-number,
 .el-date-editor {
-  border-radius: 16px !important;
+  border-radius: var(--ui-radius-input) !important;
   box-shadow: 0 0 0 1px var(--ui-border) inset !important;
 }
 
 .el-textarea__inner {
-  border-radius: 24px !important;
+  border-radius: var(--ui-radius-lg) !important;
   box-shadow: 0 0 0 1px var(--ui-border) inset !important;
 }
 
@@ -635,7 +645,7 @@ html.dark .el-table td.el-table__cell {
   height: 40px;
   line-height: 40px;
   margin: 2px 8px;
-  border-radius: 12px;
+  border-radius: var(--ui-radius-nav);
 }
 
 .el-menu-item.is-active {

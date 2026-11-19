@@ -81,17 +81,15 @@ function stageLabel(ready: boolean | undefined): string {
 
 <style scoped>
 .overview-connection-stage {
-  min-height: 268px;
-  padding: 26px;
+  min-height: 242px;
+  padding: 22px;
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(250px, 36%);
   gap: 26px;
   overflow: hidden;
   border: 1px solid var(--ui-border);
-  border-radius: var(--ui-radius-xl);
-  background:
-    radial-gradient(circle at 72% 35%, color-mix(in srgb, var(--ui-primary) 10%, transparent), transparent 34%),
-    var(--ui-surface-strong);
+  border-radius: var(--ui-radius-lg);
+  background: var(--ui-surface-strong);
 }
 
 .overview-connection-main {
@@ -135,7 +133,7 @@ function stageLabel(ready: boolean | undefined): string {
 .overview-service-path {
   position: relative;
   max-width: 620px;
-  margin-top: 48px;
+  margin-top: 38px;
   display: grid;
   grid-template-columns: repeat(5, minmax(0, 1fr));
   container-type: inline-size;
@@ -199,8 +197,8 @@ function stageLabel(ready: boolean | undefined): string {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   border: 1px solid var(--ui-border);
-  border-radius: var(--ui-radius-xl);
-  background: color-mix(in srgb, var(--ui-surface) 82%, transparent);
+  border-radius: var(--ui-radius-lg);
+  background: var(--ui-surface);
 }
 
 .overview-connection-metrics div {
@@ -226,8 +224,9 @@ function stageLabel(ready: boolean | undefined): string {
 }
 
 @media (max-width: 520px) {
-  .overview-connection-stage { min-height: 0; padding: 20px 16px; }
-  .overview-service-path { margin-top: 36px; }
+  .overview-connection-stage { min-height: 0; padding: 17px 14px; }
+  .overview-connection-stage h2 { font-size: 25px; }
+  .overview-service-path { margin-top: 30px; }
   .overview-connection-metrics div { padding: 12px; }
 }
 

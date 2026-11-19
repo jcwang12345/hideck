@@ -325,8 +325,8 @@ onMounted(load)
 .auto-answer-delay-stepper { display: grid; grid-template-columns: 44px minmax(0, 1fr) 44px; align-items: center; width: 176px; min-height: 44px; box-sizing: border-box; overflow: hidden; border: 1px solid var(--ui-border); border-radius: var(--ui-radius-md); background: var(--ui-surface); }
 .auto-answer-delay-stepper:focus-within { border-color: var(--ui-primary); box-shadow: var(--ui-focus); }
 .auto-answer-delay-value { min-width: 0; display: flex; align-items: center; justify-content: center; gap: 4px; padding: 0 8px; }
-.auto-answer-delay-value .el-input-number, .auto-answer-delay-value :deep(.el-input) { width: 5ch; min-width: 0; min-height: 42px; flex: 0 1 5ch; border-radius: 0 !important; box-shadow: none !important; }
-.auto-answer-delay-value :deep(.el-input__wrapper), .auto-answer-delay-value :deep(.el-input__wrapper.is-focus) { min-height: 42px; padding: 0; border-radius: 0 !important; background: transparent; box-shadow: none !important; }
+.auto-answer-delay-value .el-input-number, .auto-answer-delay-value :deep(.el-input) { width: 5ch; min-width: 0; min-height: 44px; flex: 0 1 5ch; border-radius: 0 !important; box-shadow: none !important; }
+.auto-answer-delay-value :deep(.el-input__wrapper), .auto-answer-delay-value :deep(.el-input__wrapper.is-focus) { min-height: 44px; padding: 0; border-radius: 0 !important; background: transparent; box-shadow: none !important; }
 .auto-answer-delay-stepper :deep(.el-input__inner) { min-width: 0; color: var(--ui-text); font-weight: 650; font-variant-numeric: tabular-nums; text-align: center; }
 .auto-answer-delay-unit { color: var(--ui-text-muted); font-size: 12px; white-space: nowrap; }
 .auto-answer-stepper-button.el-button { width: 44px; min-height: 44px; margin: 0; padding: 0; border: 0; border-radius: 0; color: var(--ui-text-muted); }
@@ -338,7 +338,7 @@ onMounted(load)
 .auto-answer-list-empty { border: 0; border-radius: 0; }
 .auto-answer-file { display: none; }
 :deep(.el-button), :deep(.el-input-number) { min-height: 44px; }
-.auto-answer-device-actions :deep(.el-input__wrapper), .auto-answer-delay-field :deep(.el-input__wrapper) { min-height: 36px; }
+.auto-answer-device-actions :deep(.el-input__wrapper), .auto-answer-delay-field :deep(.el-input__wrapper) { min-height: 44px; }
 .auto-answer-device-toggle :deep(.el-switch) { min-width: 44px; min-height: 44px; }
 @container (max-width: 620px) {
   .auto-answer-list-header { display: none; }

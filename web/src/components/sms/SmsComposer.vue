@@ -74,9 +74,13 @@ function updateMessage(value: unknown) {
 
 @media (max-width: 520px) {
   .sms-composer {
-    padding: 10px 9px;
+    position: sticky;
+    z-index: 4;
+    bottom: 0;
+    padding: 10px 9px max(10px, env(safe-area-inset-bottom, 0px));
     grid-template-columns: minmax(0, 1fr) 48px;
     scroll-margin-bottom: calc(76px + env(safe-area-inset-bottom));
+    box-shadow: 0 -6px 18px color-mix(in srgb, var(--ui-text) 7%, transparent);
   }
   .sms-send { min-width: 48px; width: 48px; min-height: 44px; padding: 0; }
   .sms-send span { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }

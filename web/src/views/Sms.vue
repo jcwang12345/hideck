@@ -65,6 +65,16 @@ const messageTarget = ref<SmsMessageTarget | null>(null)
 const viewingTarget = computed(() => !!messageTarget.value && route.query.latest !== '1')
 const searchQuery = ref('')
 
+type SmsMobileStage = 'devices' | 'threads' | 'conversation'
+
+const mobileStage = ref<SmsMobileStage>(
+  selectedThreadKey.value || targetMessageQuery.value !== undefined
+    ? 'conversation'
+    : selectedDevice.value !== 'all'
+      ? 'threads'
+      : 'devices'
+)
+
 const smsPageRef = ref<HTMLElement | null>(null)
 const smsPageWidth = ref(0)
 const SMS_NARROW_BREAKPOINT = 980
@@ -351,6 +361,9 @@ function clearSelectedThread(syncRoute = false) {
   threadMessages.value = []
   threadHasMore.value = false
   threadLoading.value = false
+  if (isNarrowLayout.value && mobileStage.value === 'conversation') {
+    mobileStage.value = 'threads'
+  }
   if (syncRoute) {
     void router.replace({ query: buildSmsQuery(selectedDevice.value) })
   }
@@ -367,6 +380,7 @@ async function fetchDevices() {
     if (selectedDevice.value !== 'all' && !devices.value.some(d => d.id === selectedDevice.value)) {
       selectedDevice.value = 'all'
       clearSelectedThread(false)
+      mobileStage.value = 'devices'
       void router.replace({ query: buildSmsQuery('all') })
     }
     return true
@@ -481,6 +495,7 @@ async function ensureThreadSelection(options: { syncRoute?: boolean; silent?: bo
   threadHasMore.value = false
   if (requestedKey) {
     selectedThreadKey.value = ''
+    if (isNarrowLayout.value) mobileStage.value = 'threads'
     void router.replace({ query: buildSmsQuery(selectedDevice.value) })
     return
   }
@@ -490,6 +505,7 @@ async function ensureThreadSelection(options: { syncRoute?: boolean; silent?: bo
 
 async function selectThread(key: string, options: { syncRoute?: boolean; silent?: boolean; scrollToBottom?: boolean } = {}) {
   if (!key) return
+  if (isNarrowLayout.value) mobileStage.value = 'conversation'
   if (selectedThreadKey.value === key && threadMessages.value.length > 0) return
   targetMessageQuery.value = undefined
   messageTarget.value = null
@@ -534,6 +550,7 @@ async function handleSelectDevice(deviceId: string, options: { syncRoute?: boole
 
   selectedDevice.value = nextDevice
   clearSelectedThread(false)
+  if (isNarrowLayout.value) mobileStage.value = 'threads'
   if (syncRoute) {
     void router.replace({ query: buildSmsQuery(nextDevice) })
   }
@@ -541,6 +558,16 @@ async function handleSelectDevice(deviceId: string, options: { syncRoute?: boole
   const ok = await fetchMessages(silent)
   if (!ok || selectedDevice.value !== nextDevice) return
   await ensureThreadSelection({ syncRoute, silent, scrollToBottom: !viewingTarget.value })
+}
+
+function showMobileDevices() {
+  mobileStage.value = 'devices'
+  closeActionSheet()
+}
+
+function showMobileThreads() {
+  mobileStage.value = 'threads'
+  closeActionSheet()
 }
 
 async function fetchMessagesAndThread(silent = false) {
@@ -584,7 +611,10 @@ usePollingScheduler(pollRefresh, 5000, {
 watch(
   () => isNarrowLayout.value,
   async (isNarrow) => {
-    if (isNarrow) return
+    if (isNarrow) {
+      if (selectedThreadKey.value) mobileStage.value = 'conversation'
+      return
+    }
     if (selectedThreadKey.value) return
     if (filteredThreads.value.length === 0) return
     await selectThread(filteredThreads.value[0].key, { syncRoute: true, scrollToBottom: true })
@@ -769,39 +799,42 @@ async function confirmDeleteThread(thread: SmsThread) {
 
 <template>
   <div ref="smsPageRef" class="app-page sms-page h-[calc(100vh-144px)] flex flex-col">
-    <ErrorState
-      v-if="devicesError"
-      class="mb-4"
-      title="设备列表加载失败"
-      :message="devicesError.message"
-      :status-code="devicesError.status"
-      :request-method="devicesError.method"
-      :request-url="devicesError.url"
-      :last-success-at="devicesLastOkAt"
-      retry-text="重试"
-      @retry="fetchDevices"
-    />
+    <div class="sms-page-errors" aria-live="polite">
+      <ErrorState
+        v-if="devicesError"
+        class="sms-page-error"
+        title="设备列表加载失败"
+        :message="devicesError.message"
+        :status-code="devicesError.status"
+        :request-method="devicesError.method"
+        :request-url="devicesError.url"
+        :last-success-at="devicesLastOkAt"
+        retry-text="重试"
+        @retry="fetchDevices"
+      />
 
-    <ErrorState
-      v-if="messagesError"
-      class="mb-6"
-      title="短信加载失败"
-      :message="messagesError.message"
-      :status-code="messagesError.status"
-      :request-method="messagesError.method"
-      :request-url="messagesError.url"
-      :last-success-at="messagesLastOkAt"
-      retry-text="重试"
-      @retry="refreshAll"
-    />
+      <ErrorState
+        v-if="messagesError"
+        class="sms-page-error"
+        title="短信加载失败"
+        :message="messagesError.message"
+        :status-code="messagesError.status"
+        :request-method="messagesError.method"
+        :request-url="messagesError.url"
+        :last-success-at="messagesLastOkAt"
+        retry-text="重试"
+        @retry="refreshAll"
+      />
+    </div>
 
     <div class="flex-1 sms-workspace ui-card ui-workspace-glow overflow-hidden relative">
       <div v-if="loading && threads.length === 0" class="absolute inset-0 z-20 flex items-center justify-center bg-white/70 dark:bg-black/40">
         <el-icon class="is-loading" size="28"><Loading /></el-icon>
       </div>
 
-      <div class="sms-main-layout">
+      <div class="sms-main-layout" :data-mobile-stage="mobileStage">
         <SmsDeviceRail
+          class="sms-stage-pane sms-stage-devices"
           :items="deviceSidebarItems"
           :selected-id="selectedDevice"
           @select="(deviceId) => void handleSelectDevice(deviceId)"
@@ -809,22 +842,26 @@ async function confirmDeleteThread(thread: SmsThread) {
 
         <SmsThreadListPane
           v-model="searchQuery"
+          class="sms-stage-pane sms-stage-threads"
           :items="presentedThreads"
           :selected-key="selectedThreadKey"
           :loading="loading"
           :deleting-key="deletingThreadKey"
+          :show-back="isNarrowLayout"
+          @back="showMobileDevices"
           @select="(key) => void selectThread(key)"
           @delete="(thread) => void confirmDeleteThread(thread)"
           @open-actions="showThreadActionSheet"
           @new-message="openSendModal"
         />
 
-        <section class="sms-conversation-pane flex flex-col min-w-0 min-h-0">
+        <section class="sms-stage-pane sms-stage-conversation sms-conversation-pane flex flex-col min-w-0 min-h-0">
           <SmsConversationHeader
             :peer="selectedThread?.peer || ''"
             :context="conversationContext"
             :loading="threadLoading"
-            :show-back="false"
+            :show-back="isNarrowLayout"
+            @back="showMobileThreads"
             @refresh="() => void fetchMessagesAndThread(false)"
             @latest="() => void showLatestMessages()"
             @delete="selectedThread && void confirmDeleteThread(selectedThread)"
@@ -935,6 +972,24 @@ async function confirmDeleteThread(thread: SmsThread) {
 .sms-target-notice :deep(.el-button) { min-height: 44px; flex-shrink: 0; }
 .sms-page {
   container-type: inline-size;
+  position: relative;
+}
+
+.sms-page-errors {
+  position: absolute;
+  z-index: 30;
+  top: 10px;
+  right: 10px;
+  left: 10px;
+  max-height: min(52dvh, 460px);
+  display: grid;
+  gap: 8px;
+  overflow: auto;
+  pointer-events: none;
+}
+
+.sms-page-error {
+  pointer-events: auto;
 }
 
 .sms-recipient-field {
@@ -1058,48 +1113,62 @@ async function confirmDeleteThread(thread: SmsThread) {
 
 @container (max-width: 979px) {
   .sms-workspace {
-    flex: none;
-    min-height: 870px;
+    flex: 1 1 auto;
+    min-height: 580px;
     overflow: hidden;
   }
 
   .sms-main-layout {
-    min-height: 870px;
-    grid-template-columns: 64px minmax(0, 1fr);
-    grid-template-rows: 250px minmax(620px, 1fr);
+    position: relative;
+    display: block;
+    min-height: 0;
   }
 
-  .sms-main-layout > :deep(.sms-device-rail) {
-    grid-column: 1;
-    grid-row: 1 / span 2;
+  .sms-main-layout > :deep(.sms-stage-pane) {
+    display: none !important;
+    width: 100%;
+    height: 100%;
+    min-height: 0;
+  }
+
+  .sms-main-layout[data-mobile-stage="devices"] > :deep(.sms-stage-devices),
+  .sms-main-layout[data-mobile-stage="threads"] > :deep(.sms-stage-threads),
+  .sms-main-layout[data-mobile-stage="conversation"] > .sms-stage-conversation {
+    display: flex !important;
   }
 
   .sms-main-layout > :deep(.sms-thread-list) {
-    grid-column: 2;
-    grid-row: 1;
     border-right: 0;
-    border-bottom: 1px solid var(--ui-border);
   }
 
   .sms-conversation-pane {
-    min-height: 620px;
-    grid-column: 2;
-    grid-row: 2;
+    min-height: 0;
   }
 }
 
 @media (max-width: 1180px) {
   .sms-page {
-    height: auto !important;
-    min-height: calc(100dvh - 104px);
+    height: calc(100dvh - 124px) !important;
+    min-height: 600px;
   }
 }
 
-@container (max-width: 560px) {
-  .sms-main-layout {
-    grid-template-columns: 52px minmax(0, 1fr);
+@media (max-width: 820px) {
+  .sms-page {
+    height: calc(100dvh - 164px - env(safe-area-inset-bottom, 0px)) !important;
+    min-height: 500px;
   }
 
+  .sms-workspace {
+    min-height: 500px;
+  }
+
+  .sms-page-errors {
+    top: 6px;
+    right: 6px;
+    left: 6px;
+    max-height: 62dvh;
+  }
 }
 
 /* 消息详情区域原生滚动条样式 */

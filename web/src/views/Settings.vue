@@ -695,7 +695,7 @@ onMounted(() => {
 
                             <!-- Bark -->
               <el-tab-pane label="Bark" name="bark" class="pt-2">
-                <div class="flex items-center justify-between mb-4">
+                <div class="notification-channel-header flex items-center justify-between mb-4">
                   <div class="flex items-center gap-2">
                     <div class="font-bold text-[var(--ui-text)]">启用 Bark 推送</div>
                   </div>
@@ -728,7 +728,7 @@ onMounted(() => {
                       尚未配置任何 Bark URL，点击右侧添加按钮。
                     </div>
 
-                    <div v-for="(url, index) in barkSettings.urls" :key="index" class="flex items-center gap-2">
+                    <div v-for="(url, index) in barkSettings.urls" :key="index" class="settings-inline-row flex items-center gap-2">
                        <el-input v-model="barkSettings.urls[index]" :disabled="!barkSettings.enabled" placeholder="https://api.day.app/YOUR_KEY/" class="flex-1" />
                        <el-button type="danger" plain @click="removeBarkUrl(index)" :disabled="!barkSettings.enabled">
                           <el-icon><Delete20Regular /></el-icon>
@@ -739,7 +739,7 @@ onMounted(() => {
                   <div class="space-y-1">
                     <label class="text-xs font-bold text-[var(--ui-muted)] uppercase tracking-wider">分组 (Group)</label>
                     <el-input v-model="barkSettings.group" :disabled="!barkSettings.enabled" placeholder="例如 hideck" />
-                    <div class="text-[10px] text-[var(--ui-muted)] mt-1">iOS 设备上的通知分组。</div>
+                    <div class="text-xs text-[var(--ui-muted)] mt-1">iOS 设备上的通知分组。</div>
                   </div>
 
                   <div class="space-y-1">
@@ -749,7 +749,7 @@ onMounted(() => {
                       <el-option label="积极 (active)" value="active" />
                       <el-option label="被动 (passive)" value="passive" />
                     </el-select>
-                    <div class="text-[10px] text-[var(--ui-muted)] mt-1">iOS 的专注模式/打扰规则会根据此级别决定是否亮屏。</div>
+                    <div class="text-xs text-[var(--ui-muted)] mt-1">iOS 的专注模式/打扰规则会根据此级别决定是否亮屏。</div>
                   </div>
 
                   <div class="space-y-1">
@@ -761,7 +761,7 @@ onMounted(() => {
 
               <!-- Email -->
               <el-tab-pane label="Email" name="email" class="pt-2">
-                <div class="flex items-center justify-between mb-4">
+                <div class="notification-channel-header flex items-center justify-between mb-4">
                   <div class="flex items-center gap-2">
                     <div class="font-bold text-[var(--ui-text)]">启用 Email 推送</div>
                   </div>
@@ -820,7 +820,7 @@ onMounted(() => {
 
               <!-- Pushplus -->
               <el-tab-pane label="Pushplus" name="pushplus" class="pt-2">
-                <div class="flex items-center justify-between mb-4">
+                <div class="notification-channel-header flex items-center justify-between mb-4">
                   <div class="flex items-center gap-2">
                     <div class="font-bold text-[var(--ui-text)]">启用 Pushplus 推送</div>
                   </div>
@@ -850,7 +850,7 @@ onMounted(() => {
 
               <!-- Webhook -->
               <el-tab-pane label="Webhook" name="webhook" class="pt-2">
-                <div class="flex items-center justify-between mb-4">
+                <div class="notification-channel-header flex items-center justify-between mb-4">
                   <div class="flex items-center gap-2">
                     <div class="font-bold text-[var(--ui-text)]">启用 Webhook 推送</div>
                   </div>
@@ -883,7 +883,7 @@ onMounted(() => {
                       尚未配置任何 Webhook URL，点击右侧添加按钮。
                     </div>
 
-                    <div v-for="(url, index) in webhookSettings.urls" :key="index" class="flex items-center gap-2">
+                    <div v-for="(url, index) in webhookSettings.urls" :key="index" class="settings-inline-row flex items-center gap-2">
                        <!-- 注意：el-input v-model="webhookSettings.urls[index]" 处理基本类型数组在 Vue3 中可能会有失去焦点问题。
                             但在这里作为简单的响应式数组依然可用，或者用更复杂的方式包裹。 -->
                        <el-input v-model="webhookSettings.urls[index]" :disabled="!webhookSettings.enabled" placeholder="https://..." class="flex-1" />
@@ -896,7 +896,7 @@ onMounted(() => {
                   <div class="space-y-1">
                     <label class="text-xs font-bold text-[var(--ui-muted)] uppercase tracking-wider">数字签名密钥 (Secret)</label>
                     <el-input v-model="webhookSettings.secret" :disabled="!webhookSettings.enabled" placeholder="用于 HMAC-SHA256 签名，选填" />
-                    <div class="text-[10px] text-[var(--ui-muted)] mt-1">若配置，将通过请求头 X-HiDeck-Signature 提供 payload 验证。</div>
+                    <div class="text-xs text-[var(--ui-muted)] mt-1">若配置，将通过请求头 X-HiDeck-Signature 提供 payload 验证。</div>
                   </div>
 
                   <div class="space-y-2">
@@ -912,7 +912,7 @@ onMounted(() => {
                       尚未配置自定义请求头，例如 Authorization、X-Api-Key 等。
                     </div>
 
-                    <div v-for="(row, index) in webhookHeaderRows" :key="row.id" class="flex items-center gap-2">
+                    <div v-for="(row, index) in webhookHeaderRows" :key="row.id" class="settings-inline-row settings-inline-row-triple flex items-center gap-2">
                       <el-select
                         v-model="row.key"
                         :disabled="!webhookSettings.enabled"
@@ -929,7 +929,7 @@ onMounted(() => {
                         <el-icon><Delete20Regular /></el-icon>
                       </el-button>
                     </div>
-                    <div class="text-[10px] text-[var(--ui-muted)] mt-1">
+                    <div class="text-xs text-[var(--ui-muted)] mt-1">
                       Content-Type 与 X-HiDeck-Signature 为系统保留头，自定义同名头会被忽略。
                     </div>
                   </div>
@@ -943,7 +943,7 @@ onMounted(() => {
                       :rows="2"
                       placeholder="{{device_label}} {{text}}"
                     />
-                    <div class="text-[10px] text-[var(--ui-muted)] mt-1">
+                    <div class="text-xs text-[var(--ui-muted)] mt-1">
                       支持占位符：<code v-pre>{{text}}</code>、<code v-pre>{{event}}</code>、<code v-pre>{{timestamp}}</code>、<code v-pre>{{device_id}}</code>、<code v-pre>{{device_name}}</code>、<code v-pre>{{device_label}}</code>、<code v-pre>{{local_number}}</code>（收到短信的本机号码，无号码时为 ICCID 尾号）。留空则直接发送原始 text。
                     </div>
                   </div>
@@ -981,7 +981,7 @@ onMounted(() => {
 
               <!-- 企业微信消息推送 -->
               <el-tab-pane label="企微 Webhook" name="wecom" class="pt-2">
-                <div class="flex items-center justify-between gap-3 mb-4">
+                <div class="notification-channel-header flex items-center justify-between gap-3 mb-4">
                   <div class="font-bold text-[var(--ui-text)]">启用企业微信消息推送</div>
                   <div class="flex items-center gap-2">
                     <el-button
@@ -1016,7 +1016,7 @@ onMounted(() => {
                     <div v-if="weComSettings.urls.length === 0" class="text-xs text-[var(--ui-muted)] py-2 border border-dashed border-[var(--ui-border)] rounded-[var(--ui-radius-lg)] text-center bg-[var(--ui-surface-muted)]">
                       尚未配置企业微信 Webhook URL
                     </div>
-                    <div v-for="(_, index) in weComSettings.urls" :key="index" class="flex items-center gap-2">
+                    <div v-for="(_, index) in weComSettings.urls" :key="index" class="settings-inline-row flex items-center gap-2">
                       <el-input
                         v-model="weComSettings.urls[index]"
                         :disabled="!weComSettings.enabled"
@@ -1040,7 +1040,7 @@ onMounted(() => {
                       :rows="12"
                       class="wecom-template-input"
                     />
-                    <div class="text-[10px] text-[var(--ui-muted)] mt-1">
+                    <div class="text-xs text-[var(--ui-muted)] mt-1">
                       变量需直接作为 JSON 值使用。支持 <code v-pre>{{event}}</code>、<code v-pre>{{title}}</code>、<code v-pre>{{message}}</code>、<code v-pre>{{timestamp}}</code>、<code v-pre>{{content}}</code>、<code v-pre>{{number}}</code>、<code v-pre>{{local_number}}</code>、<code v-pre>{{device_id}}</code>、<code v-pre>{{device_name}}</code>、<code v-pre>{{device_label}}</code>、<code v-pre>{{time}}</code>。
                     </div>
                   </div>
@@ -1059,7 +1059,7 @@ onMounted(() => {
               >
                 <el-option v-for="device in devicesStore.list" :key="device.id" :label="device.name || device.id" :value="device.id" />
               </el-select>
-              <div class="text-[10px] text-[var(--ui-muted)]">只作用于当前渠道的短信和来电通知；留空推送全部设备，其他系统通知不受影响。</div>
+              <div class="text-xs text-[var(--ui-muted)]">只作用于当前渠道的短信和来电通知；留空推送全部设备，其他系统通知不受影响。</div>
             </div>
          </div>
       </section>
@@ -1069,6 +1069,37 @@ onMounted(() => {
 </template>
 
 <style scoped>
+.settings-page {
+  min-width: 0;
+  padding-top: 22px;
+  padding-bottom: 24px;
+}
+
+.settings-page :deep(.el-button) {
+  min-height: 44px;
+}
+
+.settings-page :deep(.el-button.is-circle) {
+  min-width: 44px;
+}
+
+.settings-page :deep(.el-input__wrapper),
+.settings-page :deep(.el-select__wrapper),
+.settings-page :deep(.el-textarea__inner),
+.settings-page :deep(.el-input-number) {
+  min-height: 44px;
+}
+
+.settings-page :deep(.el-switch) {
+  min-width: 44px;
+  min-height: 44px;
+  justify-content: center;
+}
+
+.settings-page :deep(.el-segmented__item) {
+  min-height: 44px;
+}
+
 :deep(.notify-card .el-input-number) {
   width: 100%;
 }
@@ -1082,25 +1113,26 @@ onMounted(() => {
 }
 :deep(.settings-notify-tabs .el-tabs__header) {
   margin-bottom: 24px;
-  background-color: var(--el-fill-color-light);
-  border-radius: var(--ui-radius-md);
-  border-bottom: none;
+  border-bottom: 1px solid var(--ui-border);
+  background: transparent;
   display: block;
   width: 100%;
-  padding: 4px;
+  padding: 0;
 }
 :deep(.settings-notify-tabs .el-tabs__nav-wrap::after) {
   display: none;
 }
 :deep(.settings-notify-tabs .el-tabs__active-bar) {
-  display: none;
+  height: 2px;
+  border-radius: 2px 2px 0 0;
+  background: var(--ui-primary);
 }
 :deep(.settings-notify-tabs .el-tabs__item) {
-  height: 38px;
-  line-height: 38px;
+  height: 44px;
+  line-height: 44px;
   padding: 0 14px !important;
-  border-radius: var(--ui-radius-sm);
-  margin-right: 4px;
+  border-radius: 0;
+  margin-right: 0;
   color: var(--el-text-color-regular);
   transition: background-color 160ms ease, color 160ms ease;
   font-weight: 500;
@@ -1112,10 +1144,14 @@ onMounted(() => {
   color: var(--el-color-primary);
 }
 :deep(.settings-notify-tabs .el-tabs__item.is-active) {
-  background-color: var(--el-bg-color);
   color: var(--el-color-primary);
   font-weight: 600;
-  box-shadow: inset 0 0 0 1px var(--ui-border);
+  box-shadow: none;
+}
+
+:deep(.settings-notify-tabs .el-tabs__nav-scroll) {
+  overflow-x: auto;
+  scrollbar-width: thin;
 }
 
 .settings-page :deep(.el-form-item__label),
@@ -1128,6 +1164,7 @@ onMounted(() => {
   min-width: 0;
   overflow: hidden;
   container-type: inline-size;
+  border-radius: var(--ui-radius-lg);
   animation: settings-panel-enter 240ms var(--ui-ease-out) both;
 }
 
@@ -1141,7 +1178,7 @@ onMounted(() => {
 
 .settings-workspace {
   display: grid;
-  grid-template-columns: minmax(300px, 360px) minmax(0, 1fr);
+  grid-template-columns: minmax(320px, 360px) minmax(0, 1fr);
   align-items: start;
 }
 
@@ -1153,10 +1190,38 @@ onMounted(() => {
 
 .settings-security-card {
   border-right: 1px solid var(--ui-border);
+  background: color-mix(in srgb, var(--ui-surface-muted) 26%, transparent) !important;
 }
 
 .settings-system-card {
   animation-delay: 40ms !important;
+}
+
+.settings-page :deep(.mcp-settings),
+.settings-page :deep(.archive-card) {
+  background: color-mix(in srgb, var(--ui-surface) 82%, transparent);
+}
+
+.settings-page :deep(.section-icon),
+.settings-page .section-icon {
+  width: 40px;
+  height: 40px;
+  flex: 0 0 40px;
+  border-radius: var(--ui-radius-md);
+}
+
+.notification-channel-header {
+  gap: 12px;
+}
+
+.settings-inline-row {
+  min-width: 0;
+}
+
+.settings-inline-row > :deep(.el-button) {
+  flex: 0 0 44px;
+  width: 44px;
+  padding-inline: 0;
 }
 
 .settings-page .notify-card {
@@ -1167,10 +1232,59 @@ onMounted(() => {
 }
 
 @media (max-width: 640px) {
+  .settings-page {
+    padding-top: 16px;
+    padding-bottom: calc(100px + env(safe-area-inset-bottom));
+  }
+
   :deep(.settings-notify-tabs .el-tabs__item) {
     height: 44px;
     line-height: 44px;
     padding: 0 12px !important;
+  }
+
+  .settings-workspace-stage :deep(.workspace-stage-actions) {
+    width: 100%;
+  }
+
+  .notification-channel-header {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .notification-channel-header > :last-child {
+    min-height: 44px;
+    justify-content: space-between;
+  }
+
+  .settings-inline-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 44px;
+  }
+
+  .settings-inline-row > :deep(.el-button) {
+    grid-column: 2;
+  }
+
+  .settings-inline-row-triple > :deep(.el-select) {
+    grid-column: 1;
+    grid-row: 1;
+  }
+
+  .settings-inline-row-triple > :deep(.el-input) {
+    grid-column: 1;
+    grid-row: 2;
+  }
+
+  .settings-inline-row-triple > :deep(.el-button) {
+    grid-column: 2;
+    grid-row: 1 / span 2;
+    align-self: stretch;
+    height: 100%;
+  }
+
+  .settings-page .notify-card {
+    padding: 18px 16px !important;
   }
 }
 
@@ -1191,6 +1305,11 @@ onMounted(() => {
   .settings-security-card {
     border-right: 0;
     border-bottom: 1px solid var(--ui-border);
+  }
+
+  .settings-page :deep(.mcp-settings),
+  .settings-page :deep(.archive-card) {
+    grid-column: auto;
   }
 }
 

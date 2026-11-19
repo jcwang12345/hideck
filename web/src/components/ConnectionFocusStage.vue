@@ -1,9 +1,11 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import {
+  ArrowRight20Regular,
   Checkmark12Regular,
   Dismiss12Regular,
-  Open20Regular,
+  Location24Regular,
+  Settings20Regular,
   Subtract12Regular
 } from '@vicons/fluent'
 import type { DashboardDevice } from '../types/api'
@@ -12,85 +14,130 @@ import {
   canAnimateDashboardConnection,
   createDashboardDevicePresentation
 } from '../utils/dashboardPresentation'
-import WiFiCallingHealth from './WiFiCallingHealth.vue'
+import {
+  formatHealthAvailability,
+  formatHealthDuration,
+  wifiCallingHealthLabel,
+  wifiCallingHealthTone
+} from '../utils/wifiCallingHealth'
 import { t } from '../i18n'
 
-const props = defineProps<{
+type DashboardDeviceRuntime = DashboardDevice & {
+  interface?: string
+}
+
+const props = withDefaults(defineProps<{
   device?: DashboardDevice
-}>()
+  e911SetupAvailable?: boolean
+}>(), {
+  e911SetupAvailable: false
+})
 
 const emit = defineEmits<{
   (event: 'open', deviceID?: string): void
+  (event: 'open-e911', deviceID?: string): void
 }>()
 
-const emptyStages: readonly DashboardConnectionStage[] = Object.freeze(['SIM', 'Access', 'Tunnel', 'IMS', 'SMS TX', 'SMS RX'].map(key => ({ key, ready: undefined })))
+const emptyStages: readonly DashboardConnectionStage[] = Object.freeze(
+  ['SIM', 'Access', 'Tunnel', 'IMS', 'SMS TX', 'SMS RX'].map(key => ({ key, ready: undefined }))
+)
 const presentation = computed(() => props.device ? createDashboardDevicePresentation(props.device) : null)
 const stages = computed(() => presentation.value?.stages || emptyStages)
 const pathIsFlowing = computed(() => !!props.device && canAnimateDashboardConnection(props.device))
+const runtimeDevice = computed(() => props.device as DashboardDeviceRuntime | undefined)
+const deviceInterface = computed(() => String(runtimeDevice.value?.interface || '').trim() || '--')
 const focusMeta = computed(() => {
   if (!props.device || !presentation.value) return t('dashboard.waitDevice')
-  return [presentation.value.operator, props.device.id, presentation.value.connectionType].join(' · ')
+  return [props.device.id, deviceInterface.value, presentation.value.connectionType].join(' · ')
 })
 const focusDetail = computed(() => {
   if (!props.device) return t('dashboard.addDeviceFirst')
   if (!props.device.healthy) return t('dashboard.deviceOffline')
   if (props.device.phone_mode === 'modem_voice') return presentation.value?.connectionDetail
-  if (presentation.value?.connectionKind === 'volte') {
-    return t('dashboard.viaVolte')
-  }
+  if (presentation.value?.connectionKind === 'volte') return t('dashboard.viaVolte')
   if (props.device.vowifi_active) return presentation.value?.connectionDetail || t('dashboard.viaWifiIms')
   return t('dashboard.vowifiInactive')
 })
-const primaryFact = computed(() => {
-  if (props.device?.vowifi_active) {
-    return {
-      label: t('dashboard.linkState'),
-      value: presentation.value?.connectionState || t('dashboard.waitState'),
-      hint: t('dashboard.wifiCalling')
-    }
-  }
-  return {
-    label: t('dashboard.cellularSignal'),
-    value: presentation.value?.signal || t('common.unavailable'),
-    hint: props.device ? t('dashboard.currentDevice') : t('dashboard.noDevice')
-  }
+const healthTone = computed(() => wifiCallingHealthTone(props.device?.vowifi_health?.state))
+const healthLabel = computed(() => props.device?.vowifi_health
+  ? wifiCallingHealthLabel(props.device.vowifi_health)
+  : t('dashboard.waitState'))
+const healthAvailability = computed(() => formatHealthAvailability(props.device?.vowifi_health))
+const stableDuration = computed(() => {
+  const health = props.device?.vowifi_health
+  return health?.measured ? formatHealthDuration(health.stable_seconds) : '--'
 })
 
-function stageStatusLabel(ready: boolean | undefined): string {
-  if (ready === true) return t('common.ready')
-  if (ready === false) return t('common.failed')
-  return t('dashboard.waitState')
+function stageStatusLabel(stage: DashboardConnectionStage): string {
+  if (stage.pending) return '待验证'
+  if (stage.ready === false) return t('common.failed')
+  if (stage.ready !== true) return t('dashboard.waitState')
+  const labels: Record<string, string> = {
+    SIM: '就绪',
+    Access: '已接入',
+    Tunnel: '已建立',
+    IMS: '已注册',
+    'SMS TX': '可发送',
+    'SMS RX': '可接收',
+    LTE: '已驻网',
+    PDN: '已建立',
+    Voice: '可用'
+  }
+  return labels[stage.key] || t('common.ready')
 }
 </script>
 
 <template>
   <section class="connection-stage" :aria-label="t('dashboard.focusAria')">
-    <div class="connection-stage-main">
-      <header class="connection-stage-heading">
-        <span class="dashboard-eyebrow">ACTIVE DEVICE</span>
-        <span
-          class="focus-device-status"
-          :class="device ? device.healthy ? 'is-online' : 'is-offline' : 'is-idle'"
-        >
-          <i aria-hidden="true" />
-          {{ presentation?.statusLabel || t('dashboard.waitingDevice') }}
-        </span>
-      </header>
+    <header class="connection-stage-heading">
+      <span class="dashboard-eyebrow">当前线路</span>
+      <span
+        class="focus-device-status"
+        :class="device ? device.healthy ? 'is-online' : 'is-offline' : 'is-idle'"
+      >
+        <i aria-hidden="true" />
+        {{ presentation?.statusLabel || t('dashboard.waitingDevice') }}
+      </span>
+    </header>
 
+    <div class="connection-stage-copy">
       <h2>{{ presentation?.connectionTitle || t('dashboard.waitingDevice') }}</h2>
       <strong :class="{ 'is-idle': !device }">{{ presentation?.connectionState || t('dashboard.noDeviceAvailable') }}</strong>
       <p>{{ focusMeta }}</p>
-      <small class="focus-detail">{{ focusDetail }}</small>
+      <small>{{ focusDetail }}</small>
+    </div>
 
+    <button
+      v-if="e911SetupAvailable"
+      type="button"
+      class="e911-todo"
+      @click="emit('open-e911', device?.id)"
+    >
+      <span class="e911-todo-icon" aria-hidden="true"><Location24Regular /></span>
+      <span class="e911-todo-copy">
+        <strong>启用 Wi-Fi Calling 前需完成紧急地址设置</strong>
+        <small>当前 SIM 需要补充 911 地址（E911）</small>
+      </span>
+      <span class="e911-todo-action">
+        补充 911 地址
+        <ArrowRight20Regular aria-hidden="true" />
+      </span>
+    </button>
+
+    <button type="button" class="focus-open-button" @click="emit('open', device?.id)">
+      <Settings20Regular aria-hidden="true" />
+      <span>{{ device ? '管理当前设备' : t('dashboard.goDevices') }}</span>
+      <ArrowRight20Regular aria-hidden="true" />
+    </button>
+
+    <section class="connection-process" aria-label="通话服务链路">
+      <h3>连接进程</h3>
       <div
         class="connection-path"
         :class="{ 'is-flowing': pathIsFlowing }"
         :style="{ gridTemplateColumns: `repeat(${stages.length}, minmax(0, 1fr))` }"
-        aria-label="通话服务链路"
       >
-        <div class="connection-path-track" aria-hidden="true">
-          <span class="connection-signal" />
-        </div>
+        <div class="connection-path-track" aria-hidden="true" />
         <div
           v-for="stage in stages"
           :key="stage.key"
@@ -99,193 +146,175 @@ function stageStatusLabel(ready: boolean | undefined): string {
             'is-ready': stage.ready === true,
             'is-failed': stage.ready === false
           }"
-          :aria-label="`${stage.key}：${stage.pending ? '待验证' : stageStatusLabel(stage.ready)}`"
+          :aria-label="`${stage.key}：${stageStatusLabel(stage)}`"
         >
           <span aria-hidden="true">
             <Checkmark12Regular v-if="stage.ready === true" />
             <Dismiss12Regular v-else-if="stage.ready === false" />
             <Subtract12Regular v-else />
           </span>
-          <small>{{ stage.key }}<template v-if="stage.pending"> · 待验证</template></small>
+          <strong>{{ stage.key }}</strong>
+          <small>{{ stageStatusLabel(stage) }}</small>
         </div>
       </div>
-    </div>
+    </section>
 
-    <div class="connection-signal-field" aria-hidden="true">
-      <i v-for="line in 5" :key="line" />
-    </div>
-
-    <aside class="connection-stage-aside" :aria-label="t('dashboard.networkFacts')">
-      <WiFiCallingHealth
-        v-if="device?.vowifi_health && presentation?.connectionKind !== 'volte' && device?.phone_mode !== 'modem_voice'"
-        :health="device.vowifi_health"
-        mode="summary"
-      />
-      <dl>
-        <div class="focus-fact-primary">
-          <dt>{{ primaryFact.label }}</dt>
-          <dd :class="{ 'is-tabular': !device?.vowifi_active }">{{ primaryFact.value }}</dd>
-          <small>{{ primaryFact.hint }}</small>
-        </div>
-        <div>
-          <dt>{{ t('dashboard.operatorConnect') }}</dt>
-          <dd>{{ presentation ? `${presentation.operator} · ${presentation.connectionType}` : t('common.unavailable') }}</dd>
-        </div>
-        <template v-if="device?.vowifi_active">
-          <div>
-            <dt>{{ t('dashboard.accessMode') }}</dt>
-            <dd>Wi-Fi</dd>
-          </div>
-          <div>
-            <dt>{{ t('dashboard.imsSms') }}</dt>
-            <dd>{{ presentation?.connectionState || t('dashboard.waitState') }}</dd>
-          </div>
-        </template>
-        <template v-else>
-          <div>
-            <dt>{{ t('dashboard.publicV4') }}</dt>
-            <dd class="is-address" :title="presentation?.ipv4 || t('common.unassigned')">{{ presentation?.ipv4 || t('common.unassigned') }}</dd>
-          </div>
-          <div>
-            <dt>{{ t('dashboard.publicV6') }}</dt>
-            <dd class="is-address" :title="presentation?.ipv6 || t('common.unassigned')">{{ presentation?.ipv6 || t('common.unassigned') }}</dd>
-          </div>
-        </template>
-      </dl>
-      <button type="button" class="focus-open-button" @click="emit('open', device?.id)">
-        <span>{{ device ? t('dashboard.openWorkspace') : t('dashboard.goDevices') }}</span>
-        <Open20Regular aria-hidden="true" />
-      </button>
-    </aside>
+    <dl class="connection-facts" :aria-label="t('dashboard.networkFacts')">
+      <div>
+        <dt>{{ t('dashboard.accessMode') }}</dt>
+        <dd>{{ presentation?.connectionKind === 'wifi' ? 'Wi-Fi' : presentation?.connectionType || t('common.unavailable') }}</dd>
+      </div>
+      <div>
+        <dt>{{ t('dashboard.operatorConnect') }}</dt>
+        <dd>{{ presentation ? `${presentation.operator} · ${presentation.connectionType}` : t('common.unavailable') }}</dd>
+      </div>
+      <div>
+        <dt>Wi-Fi Calling 健康</dt>
+        <dd class="health-fact" :class="`is-${healthTone}`">{{ healthLabel }}</dd>
+      </div>
+      <div>
+        <dt>本次会话可用率</dt>
+        <dd class="is-tabular">{{ healthAvailability }}</dd>
+      </div>
+      <div>
+        <dt>稳定时长</dt>
+        <dd class="is-tabular">{{ stableDuration }}</dd>
+      </div>
+      <div>
+        <dt>{{ t('dashboard.linkState') }}</dt>
+        <dd>{{ presentation?.connectionState || t('dashboard.waitState') }}</dd>
+      </div>
+    </dl>
   </section>
 </template>
 
 <style scoped>
 .connection-stage {
-  position: relative;
-  min-height: 390px;
-  margin-bottom: 18px;
-  padding: clamp(28px, 4vw, 52px);
-  display: grid;
-  grid-template-columns: minmax(510px, 1.1fr) minmax(260px, .8fr) 290px;
-  gap: 0;
-  overflow: hidden;
-  border: 1px solid var(--ui-border);
-  border-radius: var(--ui-radius-xl);
-  background:
-    radial-gradient(circle at 56% 51%, color-mix(in srgb, var(--ui-primary) 13%, transparent), transparent 31%),
-    linear-gradient(132deg, var(--ui-surface) 0 48%, color-mix(in srgb, var(--ui-surface) 90%, var(--ui-nav)) 100%);
-  box-shadow: var(--ui-shadow-sm);
+  min-width: 0;
+  min-height: 560px;
+  padding: 8px 30px 26px 10px;
+  color: var(--ui-text);
 }
 
-.connection-stage-main,
-.connection-stage-aside { position: relative; z-index: 1; min-width: 0; }
 .connection-stage-heading { display: flex; align-items: center; gap: 12px; }
-.dashboard-eyebrow { color: var(--ui-primary); font: 700 var(--ui-font-caption) "v-mono", monospace; letter-spacing: .14em; }
-.focus-device-status { display: inline-flex; align-items: center; gap: 7px; color: var(--ui-text-muted); font-size: var(--ui-font-caption); }
-.focus-device-status i { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+.dashboard-eyebrow { color: var(--ui-text); font-size: 14px; font-weight: 700; }
+.focus-device-status { display: inline-flex; align-items: center; gap: 7px; color: var(--ui-text-muted); font-size: var(--ui-font-caption); font-weight: 650; }
+.focus-device-status i { width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
 .focus-device-status.is-online { color: var(--ui-success); }
 .focus-device-status.is-offline { color: var(--ui-danger); }
 .focus-device-status.is-idle { color: var(--ui-text-muted); }
 .focus-device-status.is-online i { animation: online-pulse 2.4s var(--ui-ease-in-out) infinite; }
-.connection-stage h2 { margin: 18px 0 -4px; color: var(--ui-text); font-size: clamp(54px, 5vw, 80px); font-weight: 560; letter-spacing: -.045em; line-height: .98; }
-.connection-stage-main > strong { display: block; margin: 16px 0; color: var(--ui-primary); font-size: 42px; font-weight: 500; line-height: 1.1; }
-.connection-stage-main > strong.is-idle { color: var(--ui-warning); }
-.connection-stage-main > p { margin: 0; color: color-mix(in srgb, var(--ui-text) 78%, transparent); font-size: 19px; overflow-wrap: anywhere; }
-.focus-detail { display: block; margin-top: 22px; color: var(--ui-text-muted); font-size: 15px; }
 
-.connection-path {
-  position: relative;
-  max-width: 650px;
-  margin-top: 56px;
+.connection-stage-copy { margin-top: 22px; }
+.connection-stage h2 { margin: 0; color: var(--ui-text); font-size: clamp(48px, 4vw, 66px); font-weight: 620; letter-spacing: -.045em; line-height: 1; }
+.connection-stage-copy > strong { display: block; margin: 10px 0 14px; color: var(--ui-success); font-size: clamp(30px, 2.6vw, 42px); font-weight: 650; line-height: 1.05; }
+.connection-stage-copy > strong.is-idle { color: var(--ui-warning); }
+.connection-stage-copy > p { margin: 0; color: var(--ui-text); font-size: 17px; font-weight: 560; overflow-wrap: anywhere; }
+.connection-stage-copy > small { display: block; margin-top: 8px; color: var(--ui-text-muted); font-size: 14px; line-height: 1.55; }
+
+.e911-todo {
+  width: 100%;
+  min-height: 62px;
+  margin-top: 22px;
+  padding: 10px 12px;
   display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
-  container-type: inline-size;
+  grid-template-columns: 34px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  border: 1px solid color-mix(in srgb, var(--ui-warning) 42%, var(--ui-border));
+  border-radius: var(--ui-radius-md);
+  background: var(--ui-warning-surface);
+  color: var(--ui-text);
+  text-align: left;
+  cursor: pointer;
 }
-.connection-path-track { position: absolute; top: 18px; right: 9%; left: 9%; height: 1px; background: var(--ui-border); }
-.connection-path.is-flowing .connection-path-track { background: linear-gradient(90deg, color-mix(in srgb, var(--ui-primary) 34%, var(--ui-border)), var(--ui-primary), color-mix(in srgb, var(--ui-primary) 34%, var(--ui-border))); }
-.connection-signal { position: absolute; top: -3px; left: 0; width: 7px; height: 7px; border-radius: 50%; opacity: 0; background: var(--ui-primary); box-shadow: 0 0 14px var(--ui-primary); }
-.connection-path.is-flowing .connection-signal { animation: connection-signal 2.4s linear infinite; }
-.connection-path-step { position: relative; z-index: 1; min-width: 0; display: grid; place-items: center; gap: 9px; color: var(--ui-text-muted); }
-.connection-path-step > span { width: 40px; height: 40px; display: grid; place-items: center; border: 1px solid var(--ui-border); border-radius: 50%; background: var(--ui-surface); color: inherit; }
-.connection-path-step svg { width: 15px; height: 15px; }
-.connection-path-step small { font-size: var(--ui-font-caption); }
-.connection-path-step.is-ready { color: var(--ui-primary); }
-.connection-path-step.is-ready > span { border-color: var(--ui-primary); box-shadow: 0 0 22px color-mix(in srgb, var(--ui-primary) 18%, transparent); }
+.e911-todo-icon { width: 34px; height: 34px; display: grid; place-items: center; color: var(--ui-warning); }
+.e911-todo-icon svg { width: 24px; height: 24px; }
+.e911-todo-copy { min-width: 0; display: grid; gap: 3px; }
+.e911-todo-copy strong { font-size: 13px; line-height: 1.35; }
+.e911-todo-copy small { color: var(--ui-text-muted); font-size: var(--ui-font-caption); }
+.e911-todo-action { min-height: 36px; padding: 0 10px; display: inline-flex; align-items: center; gap: 4px; border-radius: var(--ui-radius-sm); background: color-mix(in srgb, var(--ui-warning) 22%, var(--ui-surface)); color: var(--ui-text); font-size: var(--ui-font-caption); font-weight: 700; white-space: nowrap; }
+.e911-todo-action svg { width: 16px; height: 16px; }
+
+.focus-open-button {
+  width: min(100%, 300px);
+  min-height: 44px;
+  margin-top: 14px;
+  padding: 0 14px;
+  display: grid;
+  grid-template-columns: 20px minmax(0, 1fr) 18px;
+  align-items: center;
+  gap: 10px;
+  border: 1px solid var(--ui-primary);
+  border-radius: var(--ui-radius-sm);
+  background: var(--ui-primary);
+  color: var(--ui-on-primary, #fff);
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: filter 160ms var(--ui-ease-out), transform 140ms var(--ui-ease-out);
+}
+.focus-open-button svg { width: 18px; height: 18px; }
+.focus-open-button:active { transform: scale(.98); }
+
+.connection-process { margin-top: 22px; }
+.connection-process h3 { margin: 0 0 12px; color: var(--ui-text); font-size: 16px; font-weight: 700; }
+.connection-path { position: relative; display: grid; container-type: inline-size; }
+.connection-path-track { position: absolute; top: 16px; right: 8%; left: 8%; height: 1px; background: var(--ui-border); }
+.connection-path.is-flowing .connection-path-track { background: var(--ui-success); }
+.connection-path-step { position: relative; z-index: 1; min-width: 0; display: grid; justify-items: center; gap: 3px; color: var(--ui-text-muted); text-align: center; }
+.connection-path-step > span { width: 34px; height: 34px; display: grid; place-items: center; border: 1px solid var(--ui-border); border-radius: 50%; background: var(--ui-surface); color: inherit; }
+.connection-path-step svg { width: 14px; height: 14px; }
+.connection-path-step strong { margin-top: 3px; color: var(--ui-text); font-size: var(--ui-font-caption); }
+.connection-path-step small { color: var(--ui-text-muted); font-size: var(--ui-font-caption); }
+.connection-path-step.is-ready { color: var(--ui-success); }
+.connection-path-step.is-ready > span { border-color: var(--ui-success); }
 .connection-path-step.is-failed { color: var(--ui-danger); }
 .connection-path-step.is-failed > span { border-color: var(--ui-danger); }
 
-.connection-signal-field { position: relative; align-self: center; height: 250px; opacity: .48; }
-.connection-signal-field::before { position: absolute; inset: 0; background-image: radial-gradient(circle, color-mix(in srgb, var(--ui-primary) 42%, transparent) 1px, transparent 1.4px); background-size: 16px 16px; mask-image: radial-gradient(ellipse, #000, transparent 68%); content: ""; }
-.connection-signal-field i { position: absolute; right: 0; left: 4%; height: 1px; background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--ui-primary) 75%, transparent), transparent); transform-origin: 90% 50%; }
-.connection-signal-field i:nth-child(1) { top: 32%; transform: rotate(8deg); }
-.connection-signal-field i:nth-child(2) { top: 43%; transform: rotate(-4deg); }
-.connection-signal-field i:nth-child(3) { top: 55%; transform: rotate(4deg); }
-.connection-signal-field i:nth-child(4) { top: 67%; transform: rotate(-8deg); }
-.connection-signal-field i:nth-child(5) { top: 50%; }
-.connection-stage-aside { padding: 22px 24px; display: flex; flex-direction: column; border: 1px solid var(--ui-border); border-radius: var(--ui-radius-lg); background: color-mix(in srgb, var(--ui-surface-strong) 82%, transparent); }
-.connection-stage-aside dl { margin: 0; }
-.connection-stage-aside dl > div { padding: 13px 0; display: grid; gap: 5px; border-bottom: 1px solid var(--ui-border); }
-.connection-stage-aside dt { color: var(--ui-text-muted); font-size: var(--ui-font-caption); }
-.connection-stage-aside dd { min-width: 0; margin: 0; color: var(--ui-text); font-size: 14px; font-weight: 560; overflow-wrap: anywhere; }
-.connection-stage-aside .focus-fact-primary dd { color: var(--ui-primary); font-size: 30px; font-weight: 500; }
-.connection-stage-aside .focus-fact-primary small { color: var(--ui-text-muted); font-size: var(--ui-font-caption); }
-.connection-stage-aside .is-tabular,
-.connection-stage-aside .is-address { font-family: "v-mono", monospace; font-variant-numeric: tabular-nums; }
-.connection-stage-aside .is-address { font-size: var(--ui-font-body-sm); line-height: 1.45; }
-.focus-open-button { min-height: 38px; margin-top: auto; padding: 0 14px; display: flex; align-items: center; justify-content: space-between; gap: 12px; border: 1px solid color-mix(in srgb, var(--ui-primary) 48%, var(--ui-border)); border-radius: var(--ui-radius-pill); background: color-mix(in srgb, var(--ui-primary) 8%, transparent); color: var(--ui-primary); cursor: pointer; transition: border-color 160ms var(--ui-ease-out), background-color 160ms var(--ui-ease-out), transform 140ms var(--ui-ease-out); }
-.focus-open-button svg { width: 18px; height: 18px; }
-.focus-open-button:active { transform: scale(.97); }
+.connection-facts { margin: 18px 0 0; padding-top: 6px; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); border-top: 1px solid var(--ui-border); }
+.connection-facts > div { min-width: 0; min-height: 34px; display: grid; grid-template-columns: minmax(112px, .8fr) minmax(0, 1.2fr); align-items: center; gap: 12px; }
+.connection-facts dt { color: var(--ui-text-muted); font-size: var(--ui-font-caption); }
+.connection-facts dd { min-width: 0; margin: 0; color: var(--ui-text); font-size: 13px; font-weight: 600; overflow-wrap: anywhere; }
+.connection-facts .is-tabular { font-family: "v-mono", ui-monospace, monospace; font-variant-numeric: tabular-nums; }
+.health-fact.is-success { color: var(--ui-success); }
+.health-fact.is-warning { color: var(--ui-warning); }
+.health-fact.is-danger { color: var(--ui-danger); }
 
-@keyframes connection-signal {
-  0% { opacity: 0; transform: translateX(0); }
-  12%, 88% { opacity: 1; }
-  100% { opacity: 0; transform: translateX(calc(82cqw - 7px)); }
-}
 @keyframes online-pulse { 0%, 100% { opacity: .55; } 50% { opacity: 1; } }
 
 @media (hover: hover) and (pointer: fine) {
-  .focus-open-button:hover { border-color: var(--ui-primary); background: color-mix(in srgb, var(--ui-primary) 13%, transparent); }
+  .focus-open-button:hover { filter: brightness(1.08); }
+  .e911-todo:hover { border-color: var(--ui-warning); }
 }
 
-@media (max-width: 1480px) and (min-width: 1051px) {
-  .connection-stage { height: 455px; min-height: 455px; padding: 34px; grid-template-columns: minmax(420px, 1fr) 210px 235px; }
-  .connection-stage h2 { font-size: 56px; }
-  .connection-stage-main > strong { font-size: 42px; }
-  .connection-stage-aside { padding: 18px 20px; }
-}
-
-@media (max-width: 1050px) {
-  .connection-stage { grid-template-columns: minmax(0, 1fr) 250px; gap: 28px; }
-  .connection-signal-field { display: none; }
-  .connection-stage-aside { padding: 14px 16px; }
-  .connection-stage-aside dl > div { grid-template-columns: 76px minmax(0, 1fr); }
+@media (max-width: 1260px) {
+  .connection-stage { padding-right: 24px; }
+  .connection-stage h2 { font-size: 48px; }
+  .connection-facts { grid-template-columns: minmax(0, 1fr); }
 }
 
 @media (max-width: 820px) {
-  .connection-stage { min-height: 0; padding: 24px 20px; grid-template-columns: minmax(0, 1fr); }
-  .connection-stage h2 { font-size: clamp(36px, 12vw, 54px); }
-  .connection-stage-main > strong { font-size: 34px; }
-  .connection-stage-main > p { font-size: 16px; }
-  .connection-path { margin-top: 42px; }
-  .connection-stage-aside { margin-top: 26px; padding: 18px; }
-  .connection-stage-aside dl { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); }
-  .connection-stage-aside dl > div { min-width: 0; padding: 0 14px; grid-template-columns: minmax(0, 1fr); border-bottom: 0; border-left: 1px solid var(--ui-border); }
-  .connection-stage-aside dl > div:first-child { padding-left: 0; border-left: 0; }
-  .connection-stage-aside dd { font-size: 12px; }
-  .connection-stage-aside .focus-fact-primary dd { font-size: 20px; }
-  .focus-open-button { display: none; }
+  .connection-stage { min-height: 0; padding: 4px 0 24px; }
+  .connection-stage h2 { font-size: clamp(38px, 12vw, 54px); }
+  .connection-stage-copy > strong { font-size: 32px; }
+  .focus-open-button { width: 100%; }
+  .connection-facts { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 
 @media (max-width: 560px) {
-  .connection-stage-aside dl { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px 0; }
-  .connection-stage-aside dl > div:nth-child(3) { padding-left: 0; border-left: 0; }
+  .e911-todo { grid-template-columns: 30px minmax(0, 1fr); }
+  .e911-todo-action { min-height: 38px; grid-column: 1 / -1; justify-content: center; }
+  .connection-path { grid-template-columns: minmax(0, 1fr) !important; gap: 0; }
+  .connection-path-track { top: 16px; right: auto; bottom: 16px; left: 16px; width: 1px; height: auto; }
+  .connection-path-step { min-height: 44px; grid-template-columns: 34px 72px minmax(0, 1fr); justify-items: start; align-items: center; gap: 10px; text-align: left; }
+  .connection-path-step > span { grid-column: 1; }
+  .connection-path-step strong { margin: 0; }
+  .connection-facts { grid-template-columns: minmax(0, 1fr); }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .focus-device-status.is-online i,
-  .connection-path.is-flowing .connection-signal { animation: none; }
-  .connection-path.is-flowing .connection-signal { opacity: .7; transform: none; }
+  .focus-device-status.is-online i { animation: none; }
   .focus-open-button { transition-duration: 0ms; }
 }
 </style>

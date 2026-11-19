@@ -65,12 +65,12 @@ const emit = defineEmits<{
 </template>
 
 <style scoped>
-.task-detail { min-width: 0; padding: 18px 16px; border-left: 1px solid var(--ui-border); background: color-mix(in srgb, var(--ui-surface-strong) 70%, transparent); overflow: auto; }
+.task-detail { min-width: 0; padding: 18px 16px; border-left: 1px solid var(--ui-border); background: color-mix(in srgb, var(--ui-surface-muted) 42%, var(--ui-surface)); overflow: auto; }
 .task-detail > header { min-height: 42px; margin-bottom: 14px; padding: 0 3px; display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
 .task-detail > header span { color: var(--ui-primary); font: var(--ui-font-caption)/1.2 "v-mono", monospace; letter-spacing: .14em; }
 .task-detail h2 { margin: 5px 0 0; color: var(--ui-text); font-size: 20px; overflow-wrap: anywhere; }
-.task-detail > header :deep(.el-button) { width: 40px; height: 40px; flex: 0 0 40px; margin: -5px -5px 0 0; }
-.detail-panel { padding: 14px; border: 1px solid var(--ui-border); border-radius: var(--ui-radius-lg); background: color-mix(in srgb, var(--ui-surface) 62%, transparent); }
+.task-detail > header :deep(.el-button) { width: 44px; height: 44px; flex: 0 0 44px; margin: -5px -5px 0 0; }
+.detail-panel { padding: 14px; border: 1px solid var(--ui-border); border-radius: var(--ui-radius-md); background: color-mix(in srgb, var(--ui-surface) 82%, transparent); }
 .detail-panel + .detail-panel { margin-top: 10px; }
 .detail-panel h3 { margin: 0 0 8px; color: var(--ui-text); font-size: 16px; }
 .detail-panel dl { margin: 0; }
@@ -82,7 +82,7 @@ const emit = defineEmits<{
 .detail-panel dd.enabled { color: var(--ui-success); }
 .detail-code { font-family: "v-mono", ui-monospace, monospace; }
 .task-detail > footer { margin-top: 12px; display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
-.task-detail > footer :deep(.el-button) { min-height: 40px; margin: 0; }
+.task-detail > footer :deep(.el-button) { min-height: 44px; margin: 0; }
 @media (max-width: 1180px) {
   .task-detail { border-top: 1px solid var(--ui-border); border-left: 0; display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
   .task-detail > header, .task-detail > footer { grid-column: 1 / -1; }

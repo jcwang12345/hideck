@@ -15,7 +15,7 @@ const emit = defineEmits(['toggle-theme'])
 
 <template>
   <div class="unauthenticated-shell h-screen flex items-center justify-center transition-colors duration-300">
-    <div class="absolute top-4 right-4 z-50 flex items-center gap-2">
+    <div class="shell-controls">
       <SwitchLocale />
       <SwitchDark :is-dark="isDark" @toggle="(e) => emit('toggle-theme', e)" />
     </div>
@@ -34,13 +34,31 @@ const emit = defineEmits(['toggle-theme'])
 
 <style scoped>
 .unauthenticated-shell {
+  position: relative;
+  width: 100%;
+  min-height: 100dvh;
   padding: 20px;
+  overflow-x: hidden;
+  overflow-y: auto;
   background: var(--ui-bg);
+}
+
+.shell-controls {
+  position: fixed;
+  z-index: 50;
+  top: calc(12px + env(safe-area-inset-top));
+  right: 12px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
 @media (max-width: 640px) {
   .unauthenticated-shell {
-    padding: 12px;
+    height: auto !important;
+    min-height: 100dvh;
+    padding: calc(64px + env(safe-area-inset-top)) 12px calc(20px + env(safe-area-inset-bottom));
+    align-items: flex-start;
   }
 }
 </style>

@@ -22,12 +22,14 @@ defineProps<{
 
 <style scoped>
 .page-header {
-  min-height: 54px;
-  margin-bottom: 20px;
+  min-height: 52px;
+  margin-bottom: 18px;
+  padding-bottom: 14px;
   display: flex;
-  align-items: flex-start;
+  align-items: flex-end;
   justify-content: space-between;
-  gap: 20px;
+  gap: var(--ui-space-5);
+  border-bottom: 1px solid var(--ui-border);
 }
 
 .page-heading {
@@ -38,20 +40,20 @@ defineProps<{
 }
 
 h1 {
-  margin: 5px 0 0;
+  margin: 3px 0 0;
   color: var(--ui-text);
-  font-size: 28px;
-  font-weight: 590;
-  line-height: 1.15;
+  font-size: var(--ui-font-page-title);
+  font-weight: 600;
+  line-height: 1.2;
   letter-spacing: 0;
 }
 
 .page-heading-kicker {
   color: var(--ui-primary);
-  font-family: "v-mono", ui-monospace, monospace;
+  font-family: var(--ui-font-mono);
   font-size: var(--ui-font-caption);
-  font-weight: 700;
-  letter-spacing: 0.14em;
+  font-weight: 500;
+  letter-spacing: .08em;
 }
 
 p {
@@ -63,14 +65,19 @@ p {
 
 .page-actions {
   flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: var(--ui-space-2);
 }
 
 @media (max-width: 640px) {
   .page-header {
     min-height: auto;
-    margin-bottom: 16px;
+    margin-bottom: 14px;
+    padding-bottom: 12px;
+    align-items: stretch;
     flex-direction: column;
-    gap: 12px;
+    gap: var(--ui-space-3);
   }
 
   h1 {
@@ -79,6 +86,7 @@ p {
 
   .page-actions {
     width: 100%;
+    flex-wrap: wrap;
   }
 
   .page-actions :deep(> *) {

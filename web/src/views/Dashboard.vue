@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, ref, computed } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useRouter } from 'vue-router'
 import DeviceCard from '../components/DeviceCard.vue'
@@ -12,8 +12,10 @@ import RefreshButton from '../components/RefreshButton.vue'
 import TrafficAnalysisPanel from '../components/TrafficAnalysisPanel.vue'
 import { usePollingScheduler } from '../composables/usePollingScheduler'
 import { useDashboardStore } from '../stores/dashboard'
+import { devicesService } from '../services/devices'
 import type { TrafficRange } from '../services/traffic'
 import type { DashboardDevice } from '../types/api'
+import type { DeviceDetailVM } from '../types/view-model'
 import { formatDeviceTime } from '../utils/deviceTime'
 import { filterDashboardDevices } from '../utils/dashboardPresentation'
 import { formatPlmnOperatorLabel, getMccMncIndex, type MccMncRow } from '../utils/mcc-mnc'
@@ -40,7 +42,9 @@ const analysisRange = ref<TrafficRange>('day')
 const searchQuery = ref('')
 const statusFilter = ref<'all' | 'online' | 'offline'>('all')
 const selectedDeviceID = ref('')
+const selectedDetail = ref<DeviceDetailVM | null>(null)
 const mccMncIndex = ref<Map<string, MccMncRow> | null>(null)
+let detailRequestID = 0
 
 const labeledDevices = computed(() => devices.value.map((device) => {
   const operator = formatPlmnOperatorLabel(device.operator || '', mccMncIndex.value)
@@ -64,9 +68,29 @@ const selectedDevice = computed(() => {
     || labeledDevices.value.find((device) => device.healthy)
     || labeledDevices.value[0]
 })
+const selectedDeviceModel = computed({
+  get: () => selectedDevice.value?.id || '',
+  set: (deviceID: string) => { selectedDeviceID.value = deviceID }
+})
+const selectedE911SetupAvailable = computed(() => (
+  selectedDetail.value?.id === selectedDevice.value?.id
+  && selectedDetail.value?.e911_setup_available === true
+))
 
 async function fetchDevices() {
   await dashboard.fetchDevices()
+}
+
+async function fetchSelectedDeviceDetail() {
+  const id = String(selectedDevice.value?.id || '').trim()
+  const requestID = ++detailRequestID
+  if (!id) {
+    selectedDetail.value = null
+    return
+  }
+  const result = await devicesService.getOverviewLite(id)
+  if (requestID !== detailRequestID || selectedDevice.value?.id !== id) return
+  selectedDetail.value = result.ok ? result.data : null
 }
 
 async function fetchTrafficAnalysis() {
@@ -94,14 +118,38 @@ function openDeviceOverview(id?: string) {
   })
 }
 
+function openE911Setup(id?: string) {
+  const deviceID = String(id || '').trim()
+  if (!deviceID) return
+  void router.push({
+    name: 'Devices',
+    query: {
+      device: deviceID,
+      tab: 'overview',
+      e911: '1'
+    }
+  })
+}
+
 function selectDevice(device: DashboardDevice) {
   selectedDeviceID.value = device.id
 }
+
+watch(
+  () => selectedDevice.value?.id || '',
+  () => { void fetchSelectedDeviceDetail() },
+  { immediate: true }
+)
 
 usePollingScheduler(fetchDevices, 5000, {
   immediate: true,
   maxIntervalMs: 30000,
   backgroundIntervalMs: 15000
+})
+usePollingScheduler(fetchSelectedDeviceDetail, 30000, {
+  immediate: false,
+  maxIntervalMs: 120000,
+  backgroundIntervalMs: 60000
 })
 usePollingScheduler(fetchTrafficAnalysis, 60000, {
   immediate: false,
@@ -132,45 +180,9 @@ onMounted(() => {
       </template>
     </PageHeader>
 
-    <Transition name="focus-swap" mode="out-in">
-      <ConnectionFocusStage
-        :key="selectedDevice?.id || 'empty'"
-        :device="selectedDevice"
-        @open="openDeviceOverview"
-      />
-    </Transition>
-
-    <section class="fleet-summary" :aria-label="t('dashboard.fleetSummary')">
-      <div class="fleet-summary-copy">
-        <span class="section-kicker">FLEET SUMMARY</span>
-        <strong>{{ onlineCount }} / {{ totalCount }}</strong>
-        <span>{{ t('dashboard.devicesOnline') }}</span>
-      </div>
-      <div class="fleet-metrics">
-        <div class="fleet-metric">
-          <span>{{ t('dashboard.all') }}</span>
-          <strong>{{ totalCount }}</strong>
-        </div>
-        <div class="fleet-metric">
-          <span>{{ t('dashboard.online') }}</span>
-          <strong>{{ onlineCount }}</strong>
-        </div>
-        <div class="fleet-metric">
-          <span>{{ t('dashboard.offline') }}</span>
-          <strong>{{ offlineCount }}</strong>
-        </div>
-        <div class="fleet-metric fleet-metric-time">
-          <span>{{ t('dashboard.updated') }}</span>
-          <strong>
-            {{ devicesLastOkAt ? formatDeviceTime(devicesLastOkAt, { clientClock: true }) : '--:--:--' }}
-          </strong>
-        </div>
-      </div>
-    </section>
-
     <ErrorState
       v-if="devicesError"
-      class="mb-6"
+      class="mb-4"
       :title="t('dashboard.loadFailed')"
       :message="devicesError.message"
       :status-code="devicesError.status"
@@ -181,63 +193,123 @@ onMounted(() => {
       @retry="fetchDevices"
     />
 
-    <section class="device-overview-toolbar" :aria-label="t('dashboard.filterAria')">
-      <div>
-        <span class="section-kicker">DEVICE FLEET</span>
-        <h2>{{ t('dashboard.fleetTitle') }}</h2>
-        <p>{{ t('dashboard.showing', { shown: filteredDevices.length, total: totalCount }) }}</p>
-      </div>
-      <div v-if="devices.length > 0" class="device-filter-controls">
-          <el-input v-model="searchQuery" clearable :placeholder="t('dashboard.searchPlaceholder')" :prefix-icon="Search" />
-          <el-segmented
-            v-model="statusFilter"
-            :options="[
-              { label: t('dashboard.all'), value: 'all' },
-              { label: t('dashboard.online'), value: 'online' },
-              { label: t('dashboard.offline'), value: 'offline' }
-            ]"
+    <section class="signal-workspace ui-card ui-workspace-glow" aria-label="信号工作台">
+      <div v-if="devices.length > 0" class="mobile-device-picker">
+        <span>当前设备</span>
+        <el-select v-model="selectedDeviceModel" aria-label="选择当前设备">
+          <el-option
+            v-for="device in labeledDevices"
+            :key="device.id"
+            :label="`${device.name || device.id} · ${device.id}`"
+            :value="device.id"
           />
+        </el-select>
+      </div>
+
+      <div class="signal-workspace-grid">
+        <div class="current-line-panel">
+          <Transition name="focus-swap" mode="out-in">
+            <ConnectionFocusStage
+              :key="selectedDevice?.id || 'empty'"
+              :device="selectedDevice"
+              :e911-setup-available="selectedE911SetupAvailable"
+              @open="openDeviceOverview"
+              @open-e911="openE911Setup"
+            />
+          </Transition>
+        </div>
+
+        <section class="fleet-activity" :aria-label="t('dashboard.fleetSummary')">
+          <header class="device-overview-toolbar">
+            <div>
+              <span class="section-kicker">DEVICE FLEET</span>
+              <h2>设备编队 · 活动</h2>
+              <p>
+                共 {{ totalCount }} 台设备，{{ onlineCount }} 台在线
+                <template v-if="devicesLastOkAt"> · 更新 {{ formatDeviceTime(devicesLastOkAt, { clientClock: true }) }}</template>
+              </p>
+            </div>
+            <RefreshButton :loading="loading" @click="fetchDevices" />
+          </header>
+
+          <div class="fleet-summary" aria-label="设备汇总">
+            <div class="fleet-metric">
+              <span>{{ t('dashboard.all') }}</span>
+              <strong>{{ totalCount }}</strong>
+            </div>
+            <div class="fleet-metric is-online">
+              <span>{{ t('dashboard.online') }}</span>
+              <strong>{{ onlineCount }}</strong>
+            </div>
+            <div class="fleet-metric is-offline">
+              <span>{{ t('dashboard.offline') }}</span>
+              <strong>{{ offlineCount }}</strong>
+            </div>
+          </div>
+
+          <div v-if="devices.length > 0" class="device-filter-controls" :aria-label="t('dashboard.filterAria')">
+            <el-input v-model="searchQuery" clearable :placeholder="t('dashboard.searchPlaceholder')" :prefix-icon="Search" />
+            <el-segmented
+              v-model="statusFilter"
+              :options="[
+                { label: t('dashboard.all'), value: 'all' },
+                { label: t('dashboard.online'), value: 'online' },
+                { label: t('dashboard.offline'), value: 'offline' }
+              ]"
+            />
+          </div>
+
+          <ListSkeleton v-if="loading && devices.length === 0" :rows="4" />
+
+          <button
+            v-else-if="devices.length === 0"
+            type="button"
+            class="device-fleet-empty"
+            :aria-label="t('dashboard.emptyAria')"
+            @click="openDeviceOverview()"
+          >
+            <span class="device-fleet-empty-icon" aria-hidden="true"><Add24Regular /></span>
+            <span class="device-fleet-empty-copy">
+              <strong>{{ t('dashboard.emptyTitle') }}</strong>
+              <small>{{ t('dashboard.emptyHint') }}</small>
+            </span>
+            <span class="device-fleet-empty-action">
+              {{ t('dashboard.manageDevices') }}
+              <ArrowRight24Regular aria-hidden="true" />
+            </span>
+          </button>
+
+          <template v-else>
+            <EmptyState
+              v-if="filteredDevices.length === 0"
+              title="没有匹配的设备"
+              subtitle="请调整搜索关键词或在线状态筛选"
+            />
+            <template v-else>
+              <div class="fleet-table-heading" aria-hidden="true">
+                <span>设备编号</span>
+                <span>信号</span>
+                <span>运营商</span>
+                <span>健康状态</span>
+                <span>最近事件</span>
+                <span />
+              </div>
+              <section :key="deviceGridKey" class="device-status-grid" aria-label="设备实时状态">
+                <DeviceCard
+                  v-for="(dev, index) in filteredDevices"
+                  :key="dev.id"
+                  :device="dev"
+                  :selected="selectedDevice?.id === dev.id"
+                  :style="{ '--device-index': index }"
+                  @click="selectDevice(dev)"
+                  @dblclick="openDeviceOverview(dev.id)"
+                />
+              </section>
+            </template>
+          </template>
+        </section>
       </div>
     </section>
-
-    <ListSkeleton v-if="loading && devices.length === 0" :rows="4" />
-
-    <button
-      v-else-if="devices.length === 0"
-      type="button"
-      class="device-fleet-empty"
-      :aria-label="t('dashboard.emptyAria')"
-      @click="openDeviceOverview()"
-    >
-      <span class="device-fleet-empty-icon" aria-hidden="true"><Add24Regular /></span>
-      <span class="device-fleet-empty-copy">
-        <strong>{{ t('dashboard.emptyTitle') }}</strong>
-        <small>{{ t('dashboard.emptyHint') }}</small>
-      </span>
-      <span class="device-fleet-empty-action">
-        {{ t('dashboard.manageDevices') }}
-        <ArrowRight24Regular aria-hidden="true" />
-      </span>
-    </button>
-
-    <template v-else>
-      <EmptyState
-        v-if="filteredDevices.length === 0"
-        title="没有匹配的设备"
-        subtitle="请调整搜索关键词或在线状态筛选"
-      />
-      <section v-else :key="deviceGridKey" class="device-status-grid" aria-label="设备实时状态">
-        <DeviceCard
-          v-for="(dev, index) in filteredDevices"
-          :key="dev.id"
-          :device="dev"
-          :selected="selectedDevice?.id === dev.id"
-          :style="{ '--device-index': index }"
-          @click="selectDevice(dev)"
-          @dblclick="openDeviceOverview(dev.id)"
-        />
-      </section>
-    </template>
 
     <TrafficAnalysisPanel
       v-if="devices.length > 0 || !loading"
@@ -255,54 +327,90 @@ onMounted(() => {
 </template>
 
 <style scoped>
-.dashboard-page :deep(.page-header) { margin-bottom: 26px; }
-.section-kicker { color: var(--ui-primary); font: 700 var(--ui-font-caption) "v-mono", monospace; letter-spacing: .14em; }
-.fleet-summary { min-height: 79px; margin-bottom: 30px; padding: 15px 22px; display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: center; gap: 18px; border: 1px solid var(--ui-border); border-radius: var(--ui-radius-xl); background: var(--ui-surface); }
-.fleet-summary-copy { display: flex; align-items: baseline; gap: 10px; white-space: nowrap; }
-.fleet-summary-copy > strong { color: var(--ui-text); font-size: 26px; }
-.fleet-summary-copy > span:last-child { color: var(--ui-text-muted); font-size: var(--ui-font-caption); }
-.fleet-metrics { justify-self: end; display: grid; grid-template-columns: repeat(4, minmax(92px, 120px)); }
-.fleet-metric { min-width: 0; padding-left: 18px; display: grid; gap: 2px; border-left: 1px solid var(--ui-border); }
-.fleet-metric span { color: var(--ui-text-muted); font-size: var(--ui-font-caption); }
-.fleet-metric strong { color: var(--ui-text); font: 17px "v-mono", monospace; }
-.device-overview-toolbar { margin: 0 0 16px; display: flex; align-items: end; justify-content: space-between; gap: 24px; }
-.device-overview-toolbar h2 { margin: 5px 0 2px; color: var(--ui-text); font-size: 24px; font-weight: 620; }
+.dashboard-page :deep(.page-header) { margin-bottom: 18px; }
+.section-kicker { color: var(--ui-primary); font: 700 var(--ui-font-caption) "v-mono", ui-monospace, monospace; letter-spacing: .14em; }
+.signal-workspace { min-width: 0; overflow: hidden; border-radius: var(--ui-radius-xl); background: var(--ui-surface); }
+.signal-workspace-grid { min-width: 0; display: grid; grid-template-columns: minmax(470px, .86fr) minmax(620px, 1.34fr); }
+.current-line-panel { min-width: 0; padding: 28px 0 22px 30px; border-right: 1px solid var(--ui-border); }
+.fleet-activity { min-width: 0; padding: 34px 30px 26px; container: fleet-panel / inline-size; }
+
+.device-overview-toolbar { margin: 0 0 20px; display: flex; align-items: start; justify-content: space-between; gap: 24px; }
+.device-overview-toolbar h2 { margin: 5px 0 4px; color: var(--ui-text); font-size: 26px; font-weight: 680; letter-spacing: -.025em; }
 .device-overview-toolbar p { margin: 0; color: var(--ui-text-muted); font-size: 13px; }
-.device-filter-controls { width: min(100%, 560px); display: grid; grid-template-columns: minmax(220px, 1fr) auto; gap: 10px; }
-.device-status-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 290px), 1fr)); gap: 12px; }
-.device-fleet-empty {
-  width: 100%;
-  min-height: 92px;
-  padding: 18px 20px;
-  display: grid;
-  grid-template-columns: 44px minmax(0, 1fr) auto;
-  align-items: center;
-  gap: 16px;
-  border: 1px solid var(--ui-border);
-  border-radius: var(--ui-radius-xl);
-  background: linear-gradient(110deg, var(--ui-surface) 0 68%, color-mix(in srgb, var(--ui-primary) 5%, var(--ui-surface)) 100%);
-  color: var(--ui-text);
-  text-align: left;
-  cursor: pointer;
-  transition: border-color 160ms var(--ui-ease-out), background-color 160ms var(--ui-ease-out), transform 140ms var(--ui-ease-out);
-}
-.device-fleet-empty-icon { width: 44px; height: 44px; display: grid; place-items: center; border: 1px solid var(--ui-border); border-radius: var(--ui-radius-md); background: var(--ui-surface-strong); color: var(--ui-primary); }
+.fleet-summary { margin-bottom: 16px; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); border-block: 1px solid var(--ui-border); }
+.fleet-metric { min-width: 0; padding: 10px 12px; display: flex; align-items: baseline; justify-content: space-between; gap: 10px; border-right: 1px solid var(--ui-border); }
+.fleet-metric:first-child { padding-left: 0; }
+.fleet-metric:last-child { padding-right: 0; border-right: 0; }
+.fleet-metric span { color: var(--ui-text-muted); font-size: var(--ui-font-caption); }
+.fleet-metric strong { color: var(--ui-text); font: 700 18px "v-mono", ui-monospace, monospace; }
+.fleet-metric.is-online strong { color: var(--ui-success); }
+.fleet-metric.is-offline strong { color: var(--ui-danger); }
+
+.device-filter-controls { margin-bottom: 18px; display: grid; grid-template-columns: minmax(200px, 1fr) auto; gap: 10px; }
+.fleet-table-heading { min-height: 38px; padding: 0 12px; display: grid; grid-template-columns: minmax(150px, 1.15fr) 92px minmax(110px, .9fr) minmax(104px, .85fr) minmax(132px, 1fr) 20px; align-items: center; gap: 14px; color: var(--ui-text-muted); font-size: var(--ui-font-caption); }
+.device-status-grid { min-width: 0; display: grid; }
+.device-status-grid :deep(.device-card) { animation: device-card-enter 220ms var(--ui-ease-out) both; animation-delay: min(calc(var(--device-index, 0) * 30ms), 180ms); }
+
+.device-fleet-empty { width: 100%; min-height: 96px; padding: 18px 20px; display: grid; grid-template-columns: 44px minmax(0, 1fr) auto; align-items: center; gap: 16px; border: 1px solid var(--ui-border); border-radius: var(--ui-radius-lg); background: var(--ui-surface-muted); color: var(--ui-text); text-align: left; cursor: pointer; }
+.device-fleet-empty-icon { width: 44px; height: 44px; display: grid; place-items: center; border: 1px solid var(--ui-border); border-radius: var(--ui-radius-md); background: var(--ui-surface); color: var(--ui-primary); }
 .device-fleet-empty-icon svg { width: 21px; height: 21px; }
 .device-fleet-empty-copy { min-width: 0; display: grid; gap: 4px; }
-.device-fleet-empty-copy strong { font-size: 14px; font-weight: 620; }
-.device-fleet-empty-copy small { color: var(--ui-text-muted); font-size: 12px; line-height: 1.45; }
-.device-fleet-empty-action { min-height: 38px; padding: 0 13px; display: inline-flex; align-items: center; gap: 8px; border: 1px solid color-mix(in srgb, var(--ui-primary) 42%, var(--ui-border)); border-radius: var(--ui-radius-pill); color: var(--ui-primary); font-size: 12px; font-weight: 620; }
+.device-fleet-empty-copy strong { font-size: 14px; font-weight: 650; }
+.device-fleet-empty-copy small { color: var(--ui-text-muted); font-size: var(--ui-font-caption); line-height: 1.45; }
+.device-fleet-empty-action { min-height: 38px; padding: 0 13px; display: inline-flex; align-items: center; gap: 8px; color: var(--ui-primary); font-size: var(--ui-font-caption); font-weight: 650; }
 .device-fleet-empty-action svg { width: 17px; height: 17px; }
-.device-fleet-empty:active { transform: scale(.995); }
+.mobile-device-picker { display: none; }
 .dashboard-traffic { margin-top: 18px !important; }
-.device-status-grid :deep(.device-card) { animation: device-card-enter 240ms var(--ui-ease-out) both; animation-delay: min(calc(var(--device-index, 0) * 35ms), 210ms); }
-.focus-swap-enter-active { transition: opacity 220ms var(--ui-ease-out), transform 220ms var(--ui-ease-out); }
-.focus-swap-leave-active { transition: opacity 120ms var(--ui-ease-out), transform 120ms var(--ui-ease-out); }
-.focus-swap-enter-from { opacity: 0; transform: translateY(10px) scale(.992); }
-.focus-swap-leave-to { opacity: 0; transform: translateY(-4px) scale(.996); }
-@keyframes device-card-enter { from { opacity: 0; transform: translateY(8px) scale(.99); } to { opacity: 1; transform: translateY(0) scale(1); } }
-@media (hover: hover) and (pointer: fine) { .device-fleet-empty:hover { border-color: color-mix(in srgb, var(--ui-primary) 48%, var(--ui-border)); background: color-mix(in srgb, var(--ui-primary) 6%, var(--ui-surface)); } }
-@media (prefers-reduced-motion: reduce) { .device-status-grid :deep(.device-card) { animation: device-card-fade 160ms ease both; } .focus-swap-enter-from, .focus-swap-leave-to, .device-fleet-empty:active { transform: none; } @keyframes device-card-fade { from { opacity: 0; } to { opacity: 1; } } }
-@media (max-width: 1050px) { .fleet-summary { grid-template-columns: auto auto 1fr; } .fleet-metrics { display: none; } }
-@media (max-width: 760px) { .fleet-summary { grid-template-columns: minmax(0, 1fr); border-radius: var(--ui-radius-lg); } .fleet-summary-copy { white-space: normal; } .device-overview-toolbar { align-items: stretch; flex-direction: column; } .device-filter-controls { width: 100%; grid-template-columns: minmax(0, 1fr); } .device-fleet-empty { min-height: 118px; padding: 16px; grid-template-columns: 40px minmax(0, 1fr); gap: 12px; } .device-fleet-empty-icon { width: 40px; height: 40px; } .device-fleet-empty-action { min-height: 44px; grid-column: 1 / -1; justify-content: space-between; } }
+
+.focus-swap-enter-active { transition: opacity 200ms var(--ui-ease-out), transform 200ms var(--ui-ease-out); }
+.focus-swap-leave-active { transition: opacity 100ms var(--ui-ease-out), transform 100ms var(--ui-ease-out); }
+.focus-swap-enter-from { opacity: 0; transform: translateY(8px); }
+.focus-swap-leave-to { opacity: 0; transform: translateY(-3px); }
+@keyframes device-card-enter { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
+
+@container fleet-panel (max-width: 700px) {
+  .fleet-table-heading { grid-template-columns: minmax(138px, 1.2fr) 82px minmax(100px, .9fr) minmax(126px, 1fr) 20px; gap: 10px; }
+  .fleet-table-heading span:nth-child(3) { display: none; }
+}
+
+@media (max-width: 1360px) {
+  .signal-workspace-grid { grid-template-columns: minmax(430px, .9fr) minmax(520px, 1.1fr); }
+  .current-line-panel { padding-left: 24px; }
+  .fleet-activity { padding-inline: 22px; }
+}
+
+@media (max-width: 1080px) {
+  .signal-workspace-grid { grid-template-columns: minmax(0, 1fr); }
+  .current-line-panel { padding: 26px 24px 0; border-right: 0; border-bottom: 1px solid var(--ui-border); }
+  .fleet-activity { padding: 26px 24px; }
+}
+
+@media (max-width: 820px) {
+  .signal-workspace { border-radius: var(--ui-radius-lg); }
+  .mobile-device-picker { padding: 14px 14px 0; display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: center; gap: 12px; }
+  .mobile-device-picker > span { color: var(--ui-text); font-size: 13px; font-weight: 700; }
+  .current-line-panel { padding: 24px 16px 0; }
+  .fleet-activity { padding: 24px 16px; }
+  .device-overview-toolbar h2 { font-size: 22px; }
+  .fleet-table-heading { display: none; }
+  .device-filter-controls { grid-template-columns: minmax(0, 1fr); }
+}
+
+@media (max-width: 520px) {
+  .mobile-device-picker { grid-template-columns: minmax(0, 1fr); gap: 7px; }
+  .device-overview-toolbar { align-items: center; }
+  .device-overview-toolbar p { max-width: 240px; }
+  .fleet-summary { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .fleet-metric { padding-inline: 8px; display: grid; gap: 3px; }
+  .device-fleet-empty { min-height: 118px; padding: 16px; grid-template-columns: 40px minmax(0, 1fr); gap: 12px; }
+  .device-fleet-empty-icon { width: 40px; height: 40px; }
+  .device-fleet-empty-action { min-height: 44px; grid-column: 1 / -1; justify-content: space-between; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .device-status-grid :deep(.device-card) { animation: device-card-fade 140ms ease both; }
+  .focus-swap-enter-from,
+  .focus-swap-leave-to { transform: none; }
+  @keyframes device-card-fade { from { opacity: 0; } to { opacity: 1; } }
+}
 </style>

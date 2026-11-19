@@ -140,22 +140,24 @@ const emit = defineEmits<{
   .sms-device-switch:hover:not(.is-active) { background: var(--ui-surface-muted); }
 }
 
-@media (max-width: 1180px) {
-  .sms-device-rail > header { display: none; }
-  .sms-device-scroll { padding: 7px; }
-  .sms-device-switch {
-    min-height: 54px;
-    padding: 0;
-    grid-template-columns: 1fr;
-    place-items: center;
+@media (max-width: 979px) {
+  .sms-device-rail > header {
+    min-height: 64px;
+    padding-inline: 14px;
   }
-  .sms-device-copy { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
-  .sms-device-presence { position: absolute; top: 8px; right: 8px; width: 6px; height: 6px; }
+  .sms-device-scroll { padding: 8px; }
+  .sms-device-switch {
+    min-height: 68px;
+    padding: 10px 12px;
+    grid-template-columns: 24px minmax(0, 1fr) 8px;
+  }
+  .sms-device-copy { position: static; width: auto; height: auto; overflow: visible; clip-path: none; }
+  .sms-device-presence { position: static; width: 7px; height: 7px; }
 }
 
 @media (max-width: 820px) {
-  .sms-device-scroll { padding: 5px; }
-  .sms-device-switch { min-height: 48px; }
+  .sms-device-scroll { padding: 6px; }
+  .sms-device-switch { min-height: 64px; }
   .sms-device-icon { font-size: 18px; }
 }
 

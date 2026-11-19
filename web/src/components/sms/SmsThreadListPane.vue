@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onUnmounted } from 'vue'
-import { Add24Regular, Delete24Regular, Mail24Regular, Search24Regular } from '@vicons/fluent'
+import { Add24Regular, ArrowLeft24Regular, Delete24Regular, Mail24Regular, Search24Regular } from '@vicons/fluent'
 import { RecycleScroller } from 'vue-virtual-scroller'
 import type { SmsThreadVM } from '../../types/view-model'
 import { formatDeviceTime } from '../../utils/deviceTime'
@@ -16,12 +16,14 @@ const props = defineProps<{
   modelValue: string
   loading: boolean
   deletingKey: string | null
+  showBack: boolean
 }>()
 
 const scrollerItems = computed(() => Array.from(props.items))
 
 const emit = defineEmits<{
   'update:modelValue': [value: string]
+  back: []
   select: [key: string]
   delete: [thread: SmsThreadListItem]
   openActions: [thread: SmsThreadListItem]
@@ -70,7 +72,16 @@ onUnmounted(clearLongPress)
 
 <template>
   <section class="sms-thread-list" aria-label="短信会话">
-    <header class="sms-thread-toolbar">
+    <header class="sms-thread-toolbar" :class="{ 'has-back': showBack }">
+      <button
+        v-if="showBack"
+        type="button"
+        class="sms-thread-back"
+        aria-label="返回设备列表"
+        @click="emit('back')"
+      >
+        <el-icon><ArrowLeft24Regular /></el-icon>
+      </button>
       <el-input
         :model-value="modelValue"
         placeholder="搜索联系人/内容"
@@ -118,7 +129,7 @@ onUnmounted(clearLongPress)
           >
             <span class="sms-thread-avatar" aria-hidden="true">{{ smsPeerInitial(thread.peer) }}</span>
             <span class="sms-thread-copy">
-              <strong>{{ thread.peer || '未知联系人' }}</strong>
+              <strong :title="thread.peer || '未知联系人'">{{ thread.peer || '未知联系人' }}</strong>
               <small>{{ thread.lastMessage || '暂无短信内容' }}</small>
             </span>
             <span class="sms-thread-meta">
@@ -166,7 +177,23 @@ onUnmounted(clearLongPress)
   border-bottom: 1px solid var(--ui-border);
 }
 
+.sms-thread-toolbar.has-back {
+  grid-template-columns: auto minmax(0, 1fr) auto;
+}
+
 .sms-new-message { min-width: 74px; }
+.sms-thread-back {
+  width: 44px;
+  height: 44px;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--ui-border);
+  border-radius: var(--ui-radius-md);
+  background: transparent;
+  color: var(--ui-text-muted);
+  cursor: pointer;
+}
+.sms-thread-back:hover { background: var(--ui-surface-muted); color: var(--ui-text); }
 .sms-thread-scroll { min-height: 0; flex: 1; overflow: auto; }
 .sms-thread-empty { min-height: 190px; flex: 1; display: grid; place-items: center; padding: 18px; }
 

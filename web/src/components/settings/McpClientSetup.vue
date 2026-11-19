@@ -42,11 +42,16 @@ async function copy(value: string) {
 .mcp-client-path { margin: 12px 0 8px; overflow-wrap: anywhere; }
 .mcp-client-hint { margin-top: 8px; color: var(--ui-text-muted); font-size: 13px; line-height: 1.6; }
 .mcp-client-hint a { color: var(--el-color-primary); text-decoration: underline; text-underline-offset: 3px; }
-.mcp-client-config { max-height: 340px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; margin: 12px 0; padding: 14px; border: 1px solid var(--ui-border); border-radius: 8px; }
+.mcp-client-config { max-height: 340px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; margin: 12px 0; padding: 14px; border: 1px solid var(--ui-border); border-radius: var(--ui-radius-md); background: var(--ui-surface-muted); }
 .mcp-client-config:focus-visible { outline: 2px solid var(--el-color-primary); outline-offset: 2px; }
-code, pre { font-family: var(--font-mono, monospace); }
+code, pre { font-family: var(--ui-font-mono); }
 .mcp-client-actions { display: flex; flex-wrap: wrap; gap: 8px; }
 .mcp-client-actions :deep(.el-button + .el-button) { margin-left: 0; }
 .mcp-client-error { margin-top: 12px; color: var(--el-color-danger); }
-@media (max-width: 640px) { .mcp-client-actions :deep(.el-button) { min-height: 44px; } }
+.mcp-client-setup :deep(.el-select__wrapper), .mcp-client-actions :deep(.el-button) { min-height: 44px; }
+@media (max-width: 640px) {
+  .mcp-client-select { max-width: none; }
+  .mcp-client-actions { display: grid; grid-template-columns: 1fr; }
+  .mcp-client-actions :deep(.el-button) { width: 100%; min-height: 44px; }
+}
 </style>

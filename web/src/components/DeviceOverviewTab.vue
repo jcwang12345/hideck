@@ -6,7 +6,7 @@ import { phoneModeCampsOnCell } from '../utils/phoneMode'
 import { displaySignalDbm, hasValidSignalDbm } from '../utils/signalPresentation'
 import StatusLight from './StatusLight.vue'
 import OperatorSelectionDialog from './OperatorSelectionDialog.vue'
-import { Settings24Regular } from '@vicons/fluent'
+import { ChevronRight24Regular, Location24Regular, Settings24Regular } from '@vicons/fluent'
 import type { StatusLightTone } from './statusLight'
 import DeviceOverviewConnectionStage from './DeviceOverviewConnectionStage.vue'
 import DeviceOverviewIdentityPanel from './DeviceOverviewIdentityPanel.vue'
@@ -132,6 +132,30 @@ const networkPanelMessage = computed(() => {
 
 <template>
   <div class="device-overview-stack">
+    <section
+      v-if="device?.e911_setup_available"
+      class="e911-setup-notice"
+      aria-labelledby="e911-setup-title"
+    >
+      <div class="e911-setup-icon" aria-hidden="true">
+        <Location24Regular />
+      </div>
+      <div class="e911-setup-copy">
+        <span>EMERGENCY ADDRESS</span>
+        <h2 id="e911-setup-title">启用 Wi‑Fi Calling 前需要完成紧急地址设置</h2>
+        <p>当前 SIM 需要补充 911 地址，以便紧急呼叫时向当地服务提供正确的位置。</p>
+      </div>
+      <el-button
+        type="warning"
+        :loading="e911Starting"
+        class="e911-setup-action !border-0"
+        @click="emit('setup-e911')"
+      >
+        补充 911 地址
+        <el-icon><ChevronRight24Regular /></el-icon>
+      </el-button>
+    </section>
+
     <DeviceOverviewConnectionStage :device="device" />
 
     <WiFiCallingHealth
@@ -262,6 +286,64 @@ const networkPanelMessage = computed(() => {
   gap: 16px;
 }
 
+.e911-setup-notice {
+  min-width: 0;
+  padding: 14px 16px;
+  display: grid;
+  grid-template-columns: 42px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 14px;
+  border: 1px solid color-mix(in srgb, var(--ui-warning) 38%, var(--ui-border));
+  border-radius: var(--ui-radius-lg);
+  background: color-mix(in srgb, var(--ui-warning) 9%, var(--ui-surface));
+}
+
+.e911-setup-icon {
+  width: 42px;
+  height: 42px;
+  display: grid;
+  place-items: center;
+  border-radius: var(--ui-radius-md);
+  background: color-mix(in srgb, var(--ui-warning) 17%, var(--ui-surface));
+  color: var(--ui-warning);
+}
+
+.e911-setup-icon svg {
+  width: 22px;
+  height: 22px;
+}
+
+.e911-setup-copy {
+  min-width: 0;
+}
+
+.e911-setup-copy > span {
+  color: color-mix(in srgb, var(--ui-warning) 76%, var(--ui-text));
+  font: 700 var(--ui-font-caption) "v-mono", ui-monospace, monospace;
+  letter-spacing: .12em;
+}
+
+.e911-setup-copy h2 {
+  margin: 3px 0 0;
+  color: var(--ui-text);
+  font-size: 15px;
+  font-weight: 700;
+  line-height: 1.35;
+}
+
+.e911-setup-copy p {
+  margin: 3px 0 0;
+  color: var(--ui-text-muted);
+  font-size: var(--ui-font-body-sm);
+  line-height: 1.5;
+}
+
+.e911-setup-action {
+  min-height: 44px;
+  margin: 0;
+  font-weight: 700;
+}
+
 .device-overview-facts {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -305,6 +387,22 @@ const networkPanelMessage = computed(() => {
 }
 
 @media (max-width: 520px) {
+  .e911-setup-notice {
+    grid-template-columns: 38px minmax(0, 1fr);
+    padding: 13px;
+    gap: 10px 12px;
+  }
+
+  .e911-setup-icon {
+    width: 38px;
+    height: 38px;
+  }
+
+  .e911-setup-action {
+    width: 100%;
+    grid-column: 1 / -1;
+  }
+
   .overview-network-panel > div:last-child {
     grid-template-columns: minmax(0, 1fr);
   }

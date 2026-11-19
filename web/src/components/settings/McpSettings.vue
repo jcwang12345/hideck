@@ -146,22 +146,33 @@ onMounted(load)
 <style scoped>
 .mcp-settings { grid-column: 1 / -1; min-width: 0; padding: 24px; border-top: 1px solid var(--ui-border); }
 .mcp-heading, .mcp-row, .mcp-token-list li { display: flex; align-items: center; gap: 12px; }
-.mcp-heading { justify-content: space-between; margin-bottom: 16px; }
+.mcp-heading { min-height: 44px; justify-content: space-between; margin-bottom: 18px; }
 .mcp-heading > div { min-width: 0; }
 .mcp-heading :deep(.el-switch) { flex-shrink: 0; }
-h3 { color: var(--ui-text); font-size: 18px; font-weight: 700; }
+h3 { margin: 0; color: var(--ui-text); font-size: 18px; font-weight: 700; }
 p, small { color: var(--ui-text-muted); }
+.mcp-heading p { margin: 4px 0 0; font-size: var(--ui-font-caption); }
 .mcp-label { display: block; margin-bottom: 8px; font-weight: 600; }
 .mcp-help { margin: 12px 0 16px; font-size: 13px; line-height: 1.6; }
 .mcp-required { color: var(--ui-text-muted); font-size: 13px; font-weight: 400; }
 .mcp-name-error { margin-top: 8px; color: var(--el-color-danger); font-size: 13px; line-height: 1.6; }
 .mcp-error { color: var(--el-color-danger); margin-bottom: 12px; }
-.mcp-token-list { margin: 16px 0; }
+.mcp-token-list { margin: 16px 0; border-top: 1px solid var(--ui-border); }
 .mcp-token-list li { justify-content: space-between; padding: 12px 0; border-bottom: 1px solid var(--ui-border); }
 .mcp-token-list li > div:first-child { display: grid; min-width: 0; gap: 4px; overflow-wrap: anywhere; }
 .mcp-token-list .mcp-token-actions { display: flex; flex-shrink: 0; flex-wrap: wrap; gap: 8px; }
 .mcp-token-actions :deep(.el-button + .el-button) { margin-left: 0; }
-code { font-family: var(--font-mono, monospace); }
+code { font-family: var(--ui-font-mono); }
 .mcp-secret-actions { margin-top: 12px; flex-wrap: wrap; }
-@media (max-width: 640px) { .mcp-settings { padding: 16px; } .mcp-row { flex-wrap: wrap; } .mcp-row > .el-input { flex-basis: 100%; } .mcp-settings :deep(.el-button) { min-height: 44px; } }
+.mcp-settings :deep(.el-input__wrapper), .mcp-settings :deep(.el-select__wrapper), .mcp-settings :deep(.el-button) { min-height: 44px; }
+.mcp-settings :deep(.el-switch) { min-width: 44px; min-height: 44px; justify-content: center; }
+@media (max-width: 640px) {
+  .mcp-settings { padding: 18px 16px; }
+  .mcp-row { flex-wrap: wrap; }
+  .mcp-row > .el-input { flex-basis: 100%; }
+  .mcp-row > :deep(.el-button) { flex: 1 1 auto; }
+  .mcp-token-list li { align-items: flex-start; flex-direction: column; }
+  .mcp-token-list .mcp-token-actions { width: 100%; }
+  .mcp-token-actions :deep(.el-button) { flex: 1 1 0; min-height: 44px; }
+}
 </style>

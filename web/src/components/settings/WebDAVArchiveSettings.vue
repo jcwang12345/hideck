@@ -287,7 +287,7 @@ onMounted(loadSettings)
 
 <style scoped>
 .archive-card { grid-column: 1 / -1; border-top: 1px solid var(--ui-border); }
-.archive-icon { width: 48px; height: 48px; flex: none; display: grid; place-items: center; border-radius: var(--ui-radius-md); color: var(--ui-accent); background: var(--ui-selected); }
+.archive-icon { width: 40px; height: 40px; flex: none; display: grid; place-items: center; border-radius: var(--ui-radius-md); color: var(--ui-accent); background: var(--ui-selected); }
 .archive-field { display: grid; min-width: 0; gap: 8px; color: var(--ui-text-muted); font-size: 12px; font-weight: 700; }
 .archive-options { min-width: 0; padding: 14px 16px; border: 1px solid var(--ui-border); border-radius: var(--ui-radius-lg); }
 .archive-options legend { padding: 0 6px; color: var(--ui-text-muted); font-size: 12px; font-weight: 700; }
@@ -299,10 +299,16 @@ onMounted(loadSettings)
 .cleanup-preview { margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--ui-border); }
 .cleanup-preview dl { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
 .cleanup-preview dl div { padding: 10px; border-radius: var(--ui-radius-md); background: var(--el-bg-color); }
-.cleanup-preview dt { color: var(--ui-muted); font-size: 11px; }
+.cleanup-preview dt { color: var(--ui-muted); font-size: 12px; }
 .cleanup-preview dd { margin-top: 4px; color: var(--ui-text); font-weight: 700; }
+.archive-card :deep(.el-input__wrapper), .archive-card :deep(.el-input-number), .archive-card :deep(.el-button) { min-height: 44px; }
+.archive-card :deep(.el-switch) { min-width: 44px; min-height: 44px; justify-content: center; }
 @media (max-width: 640px) {
+  .archive-card { padding: 18px 16px !important; }
   .archive-actions { display: grid; grid-template-columns: 1fr; }
   .archive-actions :deep(.el-button) { width: 100%; }
+  .archive-status > div:first-child { align-items: flex-start; flex-direction: column; }
+  .archive-cleanup > div:first-child { align-items: stretch; flex-direction: column; }
+  .archive-cleanup > div:first-child > label { min-height: 44px; justify-content: space-between; }
 }
 </style>

@@ -241,15 +241,15 @@ function taskToInput(task: AutomaticTask, overrides: Partial<AutomaticTaskInput>
 </template>
 
 <style scoped>
-.automation-page { min-width: 0; padding-top: 22px; }
-.page-heading { margin-bottom: 18px; display: flex; align-items: flex-end; justify-content: space-between; gap: 20px; }
-.page-heading > div:first-child > span { color: var(--ui-primary); font: var(--ui-font-caption)/1.2 "v-mono", monospace; letter-spacing: .16em; }
+.automation-page { min-width: 0; max-width: 1440px; margin-inline: auto; padding-top: 22px; padding-bottom: 24px; }
+.page-heading { margin-bottom: 18px; padding: 0 2px 16px; display: flex; align-items: center; justify-content: space-between; gap: 20px; border-bottom: 1px solid var(--ui-border); }
+.page-heading > div:first-child > span { color: var(--ui-primary); font: 600 var(--ui-font-caption)/1.2 var(--ui-font-mono); letter-spacing: .14em; }
 .page-heading h1 { margin: 6px 0 2px; color: var(--ui-text); font-size: 24px; line-height: 1.2; }
 .page-heading p { margin: 0; color: var(--ui-text-muted); font-size: var(--ui-font-body-sm); }
 .heading-actions { display: flex; align-items: center; gap: 8px; }
-.heading-actions :deep(.el-button) { min-height: 40px; margin: 0; }
-.automation-shell { min-width: 0; overflow: hidden; display: grid; grid-template-columns: minmax(0, 1fr); }
-.automation-shell.detail-open { grid-template-columns: minmax(0, 1fr) clamp(320px, 26vw, 400px); }
+.heading-actions :deep(.el-button) { min-height: 44px; margin: 0; }
+.automation-shell { min-width: 0; overflow: hidden; display: grid; grid-template-columns: minmax(0, 1fr); border-radius: var(--ui-radius-lg); }
+.automation-shell.detail-open { grid-template-columns: minmax(0, 1fr) clamp(330px, 26vw, 400px); }
 .task-list-region { overflow-x: auto; }
 .task-detail-enter-active { transition: opacity 220ms var(--ui-ease-out), transform 220ms var(--ui-ease-out); }
 .task-detail-leave-active { transition: opacity 120ms var(--ui-ease-out), transform 120ms var(--ui-ease-out); }
@@ -258,13 +258,14 @@ function taskToInput(task: AutomaticTask, overrides: Partial<AutomaticTaskInput>
   .automation-shell, .automation-shell.detail-open { display: grid; grid-template-columns: minmax(0, 1fr); }
 }
 @media (max-width: 820px) {
-  .automation-page { padding-inline: 12px; padding-bottom: calc(92px + env(safe-area-inset-bottom)); }
+  .automation-page { padding-inline: 0; padding-bottom: calc(100px + env(safe-area-inset-bottom)); }
 }
 @media (max-width: 640px) {
-  .page-heading { align-items: flex-start; flex-direction: column; gap: 14px; }
+  .automation-page { padding-top: 16px; }
+  .page-heading { align-items: flex-start; flex-direction: column; gap: 14px; padding-inline: 0; }
   .page-heading h1 { font-size: 20px; }
-  .heading-actions { width: 100%; justify-content: flex-start; }
-  .heading-actions :deep(.el-button) { min-height: 44px; }
+  .heading-actions { width: 100%; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .heading-actions :deep(.el-button) { width: 100%; min-height: 44px; }
   .task-list-region { overflow: visible; }
 }
 @media (prefers-reduced-motion: reduce) {

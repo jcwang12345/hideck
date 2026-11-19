@@ -102,10 +102,10 @@ const identityItems = computed(() => [
 
 <style scoped>
 .device-header-brand-icon {
-  width: 48px;
-  height: 48px;
+  width: 42px;
+  height: 42px;
   border: 1px solid color-mix(in srgb, var(--ui-primary) 34%, var(--ui-border));
-  border-radius: var(--ui-radius-xl);
+  border-radius: var(--ui-radius-md);
   display: grid;
   place-items: center;
   flex-shrink: 0;
@@ -115,15 +115,14 @@ const identityItems = computed(() => [
 }
 
 .device-workspace-header {
-  min-height: 132px;
-  padding: 22px 24px 20px;
+  min-height: 116px;
+  padding: 18px 20px;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 24px;
   border-bottom: 1px solid var(--ui-border);
-  background:
-    linear-gradient(112deg, color-mix(in srgb, var(--ui-primary) 7%, transparent), transparent 38%);
+  background: var(--ui-surface);
 }
 
 .device-identity,
@@ -191,7 +190,7 @@ const identityItems = computed(() => [
 }
 
 .device-workspace-meta {
-  margin: 11px 0 0;
+  margin: 9px 0 0;
   display: grid;
   grid-template-columns: repeat(4, minmax(74px, auto));
   gap: 8px 18px;
@@ -251,7 +250,7 @@ const identityItems = computed(() => [
 
 @media (max-width: 600px) {
   .device-workspace-header {
-    padding: 18px 16px;
+    padding: 16px 14px;
   }
 
   .device-identity {
@@ -274,6 +273,7 @@ const identityItems = computed(() => [
 
   .device-workspace-actions :deep(.el-button) {
     flex: 1 1 calc(50% - 4px);
+    min-height: 44px;
   }
 }
 </style>

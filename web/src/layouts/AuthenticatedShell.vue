@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, defineAsyncComponent, onMounted, onUnmounted, ref, watch } from 'vue'
+import { computed, defineAsyncComponent, onMounted, onUnmounted, ref, watch, type Component } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useAuthStore } from '../stores/auth'
 import { usePhoneStore } from '../stores/phone'
@@ -22,7 +22,8 @@ import {
   DocumentText24Regular,
   Chat24Regular,
   CalendarClock24Regular,
-  Dialpad24Regular
+  Dialpad24Regular,
+  GridDots24Regular
 } from '@vicons/fluent'
 
 defineProps({
@@ -63,9 +64,24 @@ const menuItems = computed(() => [
   { index: '/logs', label: t('nav.logs'), icon: DocumentText24Regular },
   { index: '/settings', label: t('nav.settings'), icon: Settings24Regular }
 ])
-const mobileMenuItems = computed(() => menuItems.value.filter((item) => ['/', '/phone', '/devices', '/sms', '/commands'].includes(item.index)))
+type MobileMenuItem = {
+  index: string
+  label: string
+  icon: Component
+  prominent?: boolean
+  drawer?: boolean
+}
+
+const mobileMenuItems = computed<MobileMenuItem[]>(() => [
+  { index: '/', label: t('nav.dashboard'), icon: Board24Regular },
+  { index: '/devices', label: locale.value === 'en' ? 'Devices' : '设备', icon: Phone24Regular },
+  { index: '/phone', label: locale.value === 'en' ? 'Dial' : '拨号', icon: Dialpad24Regular, prominent: true },
+  { index: '/sms', label: locale.value === 'en' ? 'SMS' : '短信', icon: Mail24Regular },
+  { index: '__more__', label: locale.value === 'en' ? 'More' : '更多', icon: GridDots24Regular, drawer: true }
+])
 const effectiveCollapsed = computed(() => collapsed.value || viewportCompact.value)
-const expandedSidebarWidth = computed(() => viewportNarrow.value ? '190px' : '218px')
+const expandedSidebarWidth = computed(() => viewportNarrow.value ? '184px' : '208px')
+const primaryMobilePaths = ['/', '/devices', '/phone', '/sms']
 
 async function handleLogout() {
   const { ElMessageBox } = await import('element-plus')
@@ -98,6 +114,18 @@ function handleNavToggle() {
   }
   collapsed.value = !collapsed.value
   localStorage.setItem('sidebar_collapsed', collapsed.value ? '1' : '0')
+}
+
+function handleMobileNav(item: MobileMenuItem) {
+  if (item.drawer) {
+    drawerOpen.value = true
+    return
+  }
+  void router.push(item.index)
+}
+
+function mobileItemActive(item: MobileMenuItem) {
+  return item.drawer ? !primaryMobilePaths.includes(activePath.value) : activePath.value === item.index
 }
 
 function onKeydown(e: KeyboardEvent) {
@@ -155,7 +183,7 @@ const activeMenuItem = computed(() => menuItems.value.find((item) => item.index 
   <el-container v-if="auth.isAuthenticated && route.name !== 'Login'" class="h-full flow-shell">
     <el-aside
       v-if="!isMobile"
-      :width="effectiveCollapsed ? '78px' : expandedSidebarWidth"
+      :width="effectiveCollapsed ? '68px' : expandedSidebarWidth"
       class="h-full transition-[width] duration-200 relative sidebar-shell app-sidebar"
     >
       <div class="h-16 px-4 flex items-center sidebar-brand" :class="effectiveCollapsed ? 'justify-center px-0' : ''">
@@ -256,10 +284,11 @@ const activeMenuItem = computed(() => menuItems.value.find((item) => item.index 
               <Fold v-else />
             </el-icon>
           </el-button>
-          <span class="topbar-product">HIDECK</span>
+          <div class="topbar-context">
+            <span class="topbar-product">HIDECK</span>
+            <strong>{{ activeMenuItem.label }}</strong>
+          </div>
         </div>
-
-        <div class="topbar-route"><strong>{{ activeMenuItem.label }}</strong></div>
 
         <div class="topbar-side topbar-side-right">
           <div class="hidden sm:flex service-state" :aria-label="t('nav.live')">
@@ -290,12 +319,18 @@ const activeMenuItem = computed(() => menuItems.value.find((item) => item.index 
         v-for="item in mobileMenuItems"
         :key="item.index"
         type="button"
-        :class="{ 'is-active': activePath === item.index }"
+        :class="{
+          'is-active': mobileItemActive(item),
+          'is-prominent': item.prominent,
+          'is-more': item.drawer
+        }"
         :aria-label="item.label"
-        :aria-current="activePath === item.index ? 'page' : undefined"
-        @click="router.push(item.index)"
+        :aria-current="!item.drawer && activePath === item.index ? 'page' : undefined"
+        :aria-expanded="item.drawer ? drawerOpen : undefined"
+        @click="handleMobileNav(item)"
       >
-        <el-icon><component :is="item.icon" /></el-icon>
+        <span class="mobile-nav-icon"><el-icon><component :is="item.icon" /></el-icon></span>
+        <span class="mobile-nav-label">{{ item.label }}</span>
       </button>
     </nav>
 
@@ -304,20 +339,27 @@ const activeMenuItem = computed(() => menuItems.value.find((item) => item.index 
 </template>
 
 <style scoped>
+.flow-shell {
+  background: var(--ui-bg);
+}
+
+.flow-shell > :deep(.el-container) {
+  min-width: 0;
+}
+
 .sidebar-shell {
-  font-family: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-family: var(--ui-font-sans);
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
   --sidebar-menu-text: var(--ui-nav-text);
-  --sidebar-menu-hover-bg: color-mix(in srgb, var(--ui-selected) 42%, transparent);
+  --sidebar-menu-hover-bg: color-mix(in srgb, var(--ui-selected) 62%, transparent);
   --sidebar-menu-active-bg: var(--ui-selected);
   --sidebar-menu-active-color: var(--ui-nav-active);
-  --sidebar-menu-active-ring: color-mix(in srgb, var(--ui-accent) 24%, transparent);
 }
 
 :deep(.sidebar-menu) {
   margin-top: 0 !important;
-  padding: 18px 12px;
+  padding: 12px 8px;
   border-right: 0 !important;
   --el-menu-hover-bg-color: var(--sidebar-menu-hover-bg);
   --el-menu-active-color: var(--sidebar-menu-active-color);
@@ -325,28 +367,29 @@ const activeMenuItem = computed(() => menuItems.value.find((item) => item.index 
 }
 
 :deep(.sidebar-menu .el-menu-item) {
-  height: 46px;
-  min-height: 46px;
-  line-height: 46px;
-  margin: 0 0 5px;
-  border-radius: 12px;
-  padding-left: 14px !important;
-  padding-right: 14px !important;
-  font-size: 14px;
-  font-weight: 400;
-  letter-spacing: 0;
+  position: relative;
+  height: 40px;
+  min-height: 40px;
+  line-height: 40px;
+  margin: 0 0 3px;
+  padding-right: 12px !important;
+  padding-left: 12px !important;
+  border-radius: var(--ui-radius-nav);
   color: var(--sidebar-menu-text);
-  transition: background-color 160ms ease, color 160ms ease, box-shadow 160ms ease;
+  font-size: 13px;
+  font-weight: 500;
+  letter-spacing: 0;
+  transition: background-color 150ms ease, color 150ms ease;
 }
 
 :deep(.sidebar-menu .el-menu-item .el-icon) {
-  margin-right: 14px !important;
-  font-size: 20px;
+  margin-right: 11px !important;
+  font-size: 18px;
 }
 
 :deep(.sidebar-menu .el-menu-item .el-icon svg) {
-  width: 1.18rem;
-  height: 1.18rem;
+  width: 18px;
+  height: 18px;
 }
 
 :deep(.sidebar-menu .el-menu-item:hover) {
@@ -354,20 +397,18 @@ const activeMenuItem = computed(() => menuItems.value.find((item) => item.index 
 }
 
 :deep(.sidebar-menu .el-menu-item.is-active) {
-  position: relative;
   background: var(--sidebar-menu-active-bg);
   color: var(--sidebar-menu-active-color);
-  box-shadow: none;
 }
 
 :deep(.sidebar-menu .el-menu-item.is-active::before) {
   position: absolute;
+  top: 8px;
+  bottom: 8px;
   left: 0;
-  width: 3px;
-  height: 30px;
+  width: 2px;
   border-radius: 0 2px 2px 0;
   background: var(--ui-accent);
-  box-shadow: none;
   content: "";
 }
 
@@ -388,31 +429,23 @@ const activeMenuItem = computed(() => menuItems.value.find((item) => item.index 
 }
 
 :deep(.sidebar-menu.el-menu--collapse .el-menu-item) {
-  width: 46px;
-  height: 46px;
-  min-height: 46px;
-  line-height: 46px;
-  margin: 0 auto 5px;
-  border-radius: 12px;
+  width: 40px;
+  height: 40px;
+  min-height: 40px;
+  margin: 0 auto 3px;
+  padding: 0 !important;
   display: grid;
   place-items: center;
-  padding: 0 !important;
 }
 
 :deep(.sidebar-menu.el-menu--collapse .el-menu-item .el-icon) {
-  width: 1.18rem;
-  height: 1.18rem;
+  width: 18px;
+  height: 18px;
   margin: 0 !important;
-  font-size: 1.18rem;
-  line-height: 1;
   display: grid;
   place-items: center;
-}
-
-:deep(.sidebar-menu.el-menu--collapse .el-menu-item .el-icon svg) {
-  width: 1.18rem;
-  height: 1.18rem;
-  display: block;
+  font-size: 18px;
+  line-height: 1;
 }
 
 :deep(.sidebar-menu.el-menu--collapse .el-menu-item .el-menu-tooltip__trigger) {
@@ -426,15 +459,10 @@ const activeMenuItem = computed(() => menuItems.value.find((item) => item.index 
 }
 
 :deep(.sidebar-menu.el-menu--collapse > .el-menu-item [class^=el-icon]) {
-  width: 1.18rem !important;
+  width: 18px !important;
 }
 
-:deep(.sidebar-menu.el-menu--collapse .el-tooltip) {
-  width: 36px;
-  display: grid;
-  place-items: center;
-}
-
+:deep(.sidebar-menu.el-menu--collapse .el-tooltip),
 :deep(.sidebar-menu.el-menu--collapse .el-tooltip__trigger) {
   width: 36px;
   height: 36px;
@@ -442,14 +470,8 @@ const activeMenuItem = computed(() => menuItems.value.find((item) => item.index 
   place-items: center;
 }
 
-.main-inner {
-  max-width: 100%;
-}
-
-@media (min-width: 768px) {
-  .main-inner {
-    max-width: clamp(0px, calc(100vw - 240px - 48px), 80rem);
-  }
+:deep(.mobile-drawer) {
+  border-radius: 0 var(--ui-radius-xl) var(--ui-radius-xl) 0;
 }
 
 :deep(.mobile-drawer .el-drawer__body) {
@@ -461,119 +483,110 @@ const activeMenuItem = computed(() => menuItems.value.find((item) => item.index 
   border-right: 1px solid var(--ui-border);
   border-radius: 0;
   background: var(--ui-nav-surface);
-  background-color: var(--ui-nav-surface);
-  box-shadow: none;
   color: var(--ui-nav-text);
+  box-shadow: none;
 }
 
 .sidebar-brand {
-  height: 78px !important;
-  flex: 0 0 78px;
+  height: 64px !important;
+  flex: 0 0 64px;
   border-bottom: 1px solid color-mix(in srgb, var(--ui-nav-text) 8%, transparent);
 }
 
 .sidebar-brand-title {
-  min-height: auto;
-  padding: 0;
-  background: none;
   color: var(--ui-nav-text);
-  filter: none;
-  -webkit-text-fill-color: currentColor;
-  font-size: 18px;
+  font-size: 17px;
   font-weight: 700;
-  letter-spacing: 0;
   line-height: 1.1;
 }
 
 .sidebar-brand-subtitle {
-  margin-top: 3px;
+  margin-top: 2px;
   color: var(--ui-nav-muted);
-  font-family: "v-mono", ui-monospace, monospace;
+  font-family: var(--ui-font-mono);
   font-size: var(--ui-font-caption);
-  font-weight: 600;
-  letter-spacing: 0;
+  font-weight: 500;
+  letter-spacing: .04em;
 }
 
 .sidebar-brand-icon {
-  width: 44px;
-  height: 44px;
+  width: 34px;
+  height: 34px;
   display: grid;
   place-items: center;
-  border: 1px solid color-mix(in srgb, var(--ui-accent) 34%, var(--ui-border));
+  flex: 0 0 34px;
+  border: 1px solid color-mix(in srgb, var(--ui-accent) 36%, var(--ui-border));
   border-radius: var(--ui-radius-md);
   background: var(--ui-accent);
   color: #fff;
-  box-shadow: none;
-  font-size: 20px;
-  font-weight: 800;
+  font-size: 16px;
+  font-weight: 700;
 }
 
 .sidebar-menu-label {
   font-weight: 500;
-  letter-spacing: 0;
 }
 
 .sidebar-account {
-  min-height: 52px;
-  padding: 8px;
+  min-height: 46px;
+  padding: 6px;
   border: 1px solid color-mix(in srgb, var(--ui-nav-text) 10%, transparent);
-  border-radius: var(--ui-radius-md);
-  background: color-mix(in srgb, var(--ui-nav-text) 4%, transparent);
+  border-radius: var(--ui-radius-lg);
+  background: color-mix(in srgb, var(--ui-nav-text) 3%, transparent);
 }
 
 .sidebar-account-compact {
   position: absolute;
-  bottom: 20px;
+  bottom: 12px;
   left: 0;
   width: 100%;
   display: grid;
-  gap: 8px;
+  gap: 6px;
   place-items: center;
 }
 
 .sidebar-account-expanded {
   position: absolute;
-  right: 12px;
-  bottom: 16px;
-  left: 12px;
+  right: 8px;
+  bottom: 10px;
+  left: 8px;
 }
 
 .sidebar-account-compact button {
-  width: 44px;
-  height: 44px;
+  width: 38px;
+  height: 38px;
   display: grid;
   place-items: center;
   border: 1px solid color-mix(in srgb, var(--ui-nav-text) 10%, transparent);
-  border-radius: 50%;
-  background: color-mix(in srgb, var(--ui-nav-text) 3.5%, transparent);
+  border-radius: var(--ui-radius-md);
+  background: color-mix(in srgb, var(--ui-nav-text) 3%, transparent);
   color: var(--sidebar-menu-text);
   cursor: pointer;
 }
 
 .sidebar-account-icon {
-  display: grid;
   width: 32px;
   height: 32px;
-  flex: 0 0 32px;
+  display: grid;
   place-items: center;
+  flex: 0 0 32px;
   padding: 0;
   border: 0;
-  border-radius: var(--ui-radius-sm);
-  background: color-mix(in srgb, var(--ui-accent) 12%, transparent);
+  border-radius: var(--ui-radius-md);
+  background: color-mix(in srgb, var(--ui-accent) 10%, transparent);
   color: var(--ui-accent);
   cursor: pointer;
 }
 
 .sidebar-account-icon:hover,
 .sidebar-account-icon:focus-visible {
+  background: color-mix(in srgb, var(--ui-accent) 17%, transparent);
   color: var(--ui-nav-active);
-  background: color-mix(in srgb, var(--ui-accent) 20%, transparent);
 }
 
 .sidebar-locale-mark {
   font-size: 12px;
   font-weight: 700;
-  letter-spacing: 0.02em;
   line-height: 1;
 }
 
@@ -586,59 +599,80 @@ const activeMenuItem = computed(() => menuItems.value.find((item) => item.index 
 }
 
 .app-topbar {
-  width: calc(100% - 36px);
-  margin: 18px 18px 0 !important;
-  padding: 0 22px !important;
-  flex: 0 0 64px;
-  border: 1px solid var(--ui-border);
-  border-radius: var(--ui-radius-lg);
-  background: color-mix(in srgb, var(--ui-surface-subtle) 92%, transparent);
-  box-shadow: var(--ui-shadow-sm);
-  backdrop-filter: blur(18px);
+  width: 100%;
+  height: var(--ui-shell-topbar-height) !important;
+  margin: 0 !important;
+  padding: 0 20px !important;
+  flex: 0 0 var(--ui-shell-topbar-height);
+  border-width: 0 0 1px;
+  border-style: solid;
+  border-color: var(--ui-border);
+  border-radius: 0;
+  background: color-mix(in srgb, var(--ui-surface) 96%, transparent);
+  box-shadow: 0 1px 2px color-mix(in srgb, var(--ui-text) 4%, transparent);
+  backdrop-filter: blur(12px);
 }
 
 .nav-toggle {
-  width: 40px;
+  width: 36px;
+  min-height: 36px;
+  margin-right: 4px;
   color: var(--ui-text-muted);
 }
 
-.topbar-route {
-  position: absolute;
-  left: 50%;
-  transform: translateX(-50%);
+.topbar-context {
+  min-width: 0;
+  display: grid;
+  gap: 1px;
 }
 
-.topbar-route strong {
+.topbar-context strong {
+  overflow: hidden;
   color: var(--ui-text);
   font-size: 15px;
   font-weight: 600;
+  line-height: 1.2;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .topbar-side {
-  min-width: 180px;
+  min-width: 0;
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 8px;
 }
 
-.topbar-side-right { justify-content: flex-end; }
+.topbar-side-left {
+  flex: 1 1 auto;
+}
+
+.topbar-side-right {
+  flex: 0 0 auto;
+  justify-content: flex-end;
+}
 
 .topbar-product {
   color: var(--ui-text-muted);
-  font-family: "v-mono", ui-monospace, monospace;
+  font-family: var(--ui-font-mono);
   font-size: var(--ui-font-caption);
-  letter-spacing: 0.16em;
+  letter-spacing: .08em;
+  line-height: 1.2;
+}
+
+.topbar-product::after {
+  content: ' / CONTROL PLANE';
 }
 
 .service-state {
-  min-height: 32px;
+  min-height: 30px;
+  padding: 0 8px;
+  display: flex;
   align-items: center;
   gap: 7px;
-  padding: 0 10px;
-  border: 0;
   color: var(--ui-success);
   font-size: 12px;
-  font-weight: 600;
+  font-weight: 500;
 }
 
 .service-state-dot {
@@ -646,36 +680,36 @@ const activeMenuItem = computed(() => menuItems.value.find((item) => item.index 
   height: 7px;
   border-radius: 50%;
   background: var(--ui-success);
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--ui-success) 16%, transparent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--ui-success) 12%, transparent);
 }
 
 .app-main {
-  padding-top: 34px !important;
+  padding: 24px 24px 32px !important;
   background: var(--ui-bg);
+  overscroll-behavior: contain;
 }
-
-.mobile-bottom-nav { display: none; }
 
 .main-inner {
-  max-width: 1600px;
+  width: 100%;
+  max-width: 1680px;
 }
 
-@media (min-width: 768px) {
-  .main-inner {
-    max-width: 1680px;
-  }
+.mobile-bottom-nav {
+  display: none;
 }
 
 @media (max-width: 1480px) and (min-width: 821px) {
-  .app-main { padding-right: 14px !important; padding-left: 22px !important; }
+  .app-main {
+    padding: 20px 20px 28px !important;
+  }
 }
 
 @media (max-width: 1180px) and (min-width: 821px) {
-  .app-main { padding: 24px 8px 48px 16px !important; }
+  .app-main {
+    padding: 18px 16px 24px !important;
+  }
+
   .app-topbar {
-    width: calc(100% - 24px);
-    margin-right: 12px !important;
-    margin-left: 12px !important;
     padding-right: 14px !important;
     padding-left: 14px !important;
   }
@@ -683,54 +717,114 @@ const activeMenuItem = computed(() => menuItems.value.find((item) => item.index 
 
 @media (max-width: 820px) {
   .app-topbar {
-    width: 100%;
-    height: 56px !important;
-    margin: 0 !important;
-    padding: 0 14px !important;
-    flex-basis: 56px;
-    border-width: 0 0 1px;
-    border-radius: 0;
-    background: color-mix(in srgb, var(--ui-surface-subtle) 88%, transparent);
+    height: 54px !important;
+    padding: 0 10px !important;
+    flex-basis: 54px;
+    padding-top: env(safe-area-inset-top) !important;
+    box-sizing: content-box;
   }
 
-  .topbar-side { min-width: auto; }
-  .topbar-product { display: none; }
+  .topbar-product,
+  .service-state {
+    display: none !important;
+  }
+
+  .topbar-context strong {
+    font-size: 16px;
+  }
 
   .app-main {
-    padding: 20px 12px calc(86px + env(safe-area-inset-bottom)) !important;
+    padding: 16px 12px calc(94px + env(safe-area-inset-bottom)) !important;
   }
 
   .mobile-bottom-nav {
     position: fixed;
     z-index: 40;
-    right: 12px;
-    bottom: calc(8px + env(safe-area-inset-bottom));
-    left: 12px;
-    height: 58px;
+    right: 0;
+    bottom: 0;
+    left: 0;
+    height: calc(68px + env(safe-area-inset-bottom));
+    padding: 5px 6px env(safe-area-inset-bottom);
     display: grid;
     grid-template-columns: repeat(5, minmax(44px, 1fr));
-    border: 1px solid color-mix(in srgb, var(--ui-text) 12%, transparent);
-    border-radius: var(--ui-radius-lg);
-    background: color-mix(in srgb, var(--ui-surface) 88%, transparent);
-    box-shadow: 0 1px 0 color-mix(in srgb, var(--ui-text) 7%, transparent) inset, 0 22px 64px color-mix(in srgb, var(--ui-text) 16%, transparent);
-    backdrop-filter: blur(22px) saturate(1.2);
-    overflow: hidden;
+    align-items: stretch;
+    border-top: 1px solid var(--ui-border);
+    background: color-mix(in srgb, var(--ui-surface) 96%, transparent);
+    box-shadow: 0 -4px 14px color-mix(in srgb, var(--ui-text) 7%, transparent);
+    backdrop-filter: blur(16px) saturate(1.1);
+    box-sizing: border-box;
   }
 
   .mobile-bottom-nav button {
+    position: relative;
     min-width: 0;
+    min-height: 58px;
+    padding: 4px 2px 3px;
+    display: grid;
+    grid-template-rows: 30px 16px;
+    place-items: center;
+    gap: 1px;
     border: 0;
+    border-radius: var(--ui-radius-md);
     background: transparent;
     color: var(--ui-text-muted);
     cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
   }
 
-  .mobile-bottom-nav button.is-active {
-    background: color-mix(in srgb, var(--ui-primary) 12%, transparent);
+  .mobile-bottom-nav button.is-active:not(.is-prominent) {
+    background: color-mix(in srgb, var(--ui-primary) 9%, transparent);
     color: var(--ui-primary);
-    box-shadow: 2px 0 0 var(--ui-primary) inset;
   }
 
-  .mobile-bottom-nav .el-icon { font-size: 19px; }
+  .mobile-nav-icon {
+    width: 30px;
+    height: 30px;
+    display: grid;
+    place-items: center;
+    border-radius: var(--ui-radius-md);
+  }
+
+  .mobile-nav-icon .el-icon {
+    font-size: 21px;
+  }
+
+  .mobile-nav-label {
+    max-width: 100%;
+    overflow: hidden;
+    font-size: 12px;
+    font-weight: 500;
+    line-height: 16px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .mobile-bottom-nav button.is-prominent {
+    grid-template-rows: 36px 16px;
+    color: var(--ui-primary);
+  }
+
+  .mobile-bottom-nav button.is-prominent .mobile-nav-icon {
+    width: 50px;
+    height: 50px;
+    margin-top: -20px;
+    border: 4px solid var(--ui-surface);
+    border-radius: 50%;
+    background: var(--ui-primary-solid);
+    color: #fff;
+    box-shadow: 0 4px 12px color-mix(in srgb, var(--ui-primary-solid) 20%, transparent);
+  }
+
+  .mobile-bottom-nav button.is-prominent .el-icon {
+    font-size: 23px;
+  }
+
+  .mobile-bottom-nav button.is-prominent.is-active .mobile-nav-icon {
+    background: var(--ui-primary);
+  }
+
+  :deep(.mobile-drawer) {
+    padding-bottom: env(safe-area-inset-bottom);
+  }
 }
 </style>

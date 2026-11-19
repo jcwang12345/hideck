@@ -1,20 +1,25 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import {
-  Cellular3G24Regular,
-  Cellular4G24Regular,
-  Cellular5G24Regular,
-  CellularData124Regular,
-  DataUsage24Regular,
-  Globe24Regular,
-  Wifi124Regular
+  ArrowRight20Regular,
+  CheckmarkCircle20Regular,
+  Warning20Regular
 } from '@vicons/fluent'
 import type { DashboardDevice } from '../types/api'
 import {
   createDashboardDevicePresentation,
   hasDashboardSignal
 } from '../utils/dashboardPresentation'
-import WiFiCallingHealth from './WiFiCallingHealth.vue'
+import {
+  formatHealthEventTime,
+  wifiCallingHealthEventLabel,
+  wifiCallingHealthLabel,
+  wifiCallingHealthTone
+} from '../utils/wifiCallingHealth'
+
+type DashboardDeviceRuntime = DashboardDevice & {
+  interface?: string
+}
 
 const props = withDefaults(defineProps<{
   device: DashboardDevice
@@ -24,28 +29,8 @@ const props = withDefaults(defineProps<{
 })
 
 const presentation = computed(() => createDashboardDevicePresentation(props.device))
-const networkIcon = computed(() => {
-  if (presentation.value.connectionKind === 'volte' || presentation.value.connectionType === 'VoLTE') {
-    return Cellular4G24Regular
-  }
-  if (props.device.vowifi_active) return Wifi124Regular
-  const mode = presentation.value.connectionType.toUpperCase()
-  if (mode.includes('5G') || mode.includes('NR')) return Cellular5G24Regular
-  if (mode.includes('4G') || mode.includes('LTE')) return Cellular4G24Regular
-  if (mode.includes('3G') || mode.includes('WCDMA') || mode.includes('UMTS')) {
-    return Cellular3G24Regular
-  }
-  return CellularData124Regular
-})
-const connectionDetail = computed(() => {
-  if (!props.device.healthy) return '设备未连接'
-  if (presentation.value.connectionKind === 'volte') {
-    return presentation.value.connectionTitle
-  }
-  if (props.device.vowifi_active) return `${presentation.value.connectionType} · VoWiFi 已连接`
-  if (presentation.value.connectionType === '不可用') return '网络检测中'
-  return `${presentation.value.connectionType} 已连接`
-})
+const runtimeDevice = computed(() => props.device as DashboardDeviceRuntime)
+const interfaceLabel = computed(() => String(runtimeDevice.value.interface || '').trim() || '--')
 const signalBars = computed(() => {
   const dbm = props.device.signal_dbm
   if (!hasDashboardSignal(dbm)) return 0
@@ -60,136 +45,156 @@ const signalTone = computed(() => {
   if (signalBars.value === 2) return 'is-warning'
   return 'is-good'
 })
-const showCellularFacts = computed(() => presentation.value.showsCellularFacts)
+const healthTone = computed(() => wifiCallingHealthTone(props.device.vowifi_health?.state))
+const healthLabel = computed(() => props.device.vowifi_health
+  ? wifiCallingHealthLabel(props.device.vowifi_health)
+  : props.device.healthy ? '状态监测中' : '设备离线')
+const latestEvent = computed(() => {
+  const events = props.device.vowifi_health?.events || []
+  const event = events.at(-1)
+  if (event) {
+    return {
+      label: wifiCallingHealthEventLabel(event),
+      time: formatHealthEventTime(event.at)
+    }
+  }
+  const updatedAt = props.device.vowifi_runtime?.updated_at
+  if (updatedAt) {
+    return {
+      label: presentation.value.connectionDetail || '状态已更新',
+      time: formatHealthEventTime(updatedAt)
+    }
+  }
+  return {
+    label: props.device.healthy ? '等待状态更新' : '设备当前离线',
+    time: '--:--:--'
+  }
+})
 </script>
 
 <template>
   <button
     type="button"
-    class="device-card ui-card ui-card-hover"
-    :class="{ 'device-card-selected': selected, 'is-vowifi': !showCellularFacts }"
+    class="device-card"
+    :class="{ 'device-card-selected': selected }"
     :aria-label="`选择 ${presentation.displayName}；双击打开设备工作区`"
     :aria-pressed="selected"
   >
-    <span class="device-card-header">
-      <span class="device-title-group">
-        <span class="device-glyph" aria-hidden="true"><component :is="networkIcon" /></span>
-        <span class="device-identity">
-          <strong>{{ presentation.displayName }}</strong>
-          <small>{{ device.id }} · {{ presentation.operator }}</small>
-        </span>
-      </span>
-      <span class="device-state" :class="device.healthy ? 'is-online' : 'is-offline'">
-        <i aria-hidden="true" />
-        {{ presentation.statusLabel }}
+    <span class="device-cell device-cell-identity">
+      <span class="device-state-dot" :class="device.healthy ? 'is-online' : 'is-offline'" aria-hidden="true" />
+      <span class="device-identity-copy">
+        <strong>{{ presentation.displayName }}</strong>
+        <small>{{ interfaceLabel }} · {{ presentation.connectionType }}</small>
       </span>
     </span>
 
-    <span class="device-connection-summary">
-      <span class="connection-primary">
-        <component :is="networkIcon" aria-hidden="true" />
-        <span>
-          <strong>{{ presentation.connectionTitle }}</strong>
-          <small>{{ connectionDetail }}</small>
-        </span>
+    <span class="device-cell device-cell-signal" :class="signalTone">
+      <span class="signal-bars" aria-hidden="true">
+        <i v-for="bar in 4" :key="bar" :class="{ 'is-filled': signalBars >= bar }" />
       </span>
+      <small>{{ presentation.signal }}</small>
     </span>
 
-    <WiFiCallingHealth
-      v-if="device.vowifi_health && presentation.connectionKind !== 'volte'"
-      :health="device.vowifi_health"
-      mode="compact"
-    />
-
-    <span v-if="showCellularFacts" class="device-card-footer">
-      <span class="device-addresses">
-        <span class="address-heading">
-          <Globe24Regular aria-hidden="true" />
-          <span>公网地址</span>
-        </span>
-        <span class="address-list">
-          <span>
-            <small>IPv4</small>
-            <code :title="presentation.ipv4">{{ presentation.ipv4 }}</code>
-          </span>
-          <span>
-            <small>IPv6</small>
-            <code :title="presentation.ipv6">{{ presentation.ipv6 }}</code>
-          </span>
-        </span>
-      </span>
-      <span class="device-signal">
-        <span class="signal-label">
-          <DataUsage24Regular aria-hidden="true" />
-          <span>蜂窝信号</span>
-        </span>
-        <span class="signal-reading" :class="signalTone">
-          <span class="signal-bars" aria-hidden="true">
-            <i v-for="bar in 4" :key="bar" :class="{ 'is-filled': signalBars >= bar }" />
-          </span>
-          <strong>{{ presentation.signal }}</strong>
-        </span>
-      </span>
+    <span class="device-cell device-cell-operator">
+      <strong>{{ presentation.operator }}</strong>
+      <small>{{ presentation.connectionType }}</small>
     </span>
+
+    <span class="device-cell device-cell-health" :class="`is-${healthTone}`">
+      <component :is="healthTone === 'danger' ? Warning20Regular : CheckmarkCircle20Regular" aria-hidden="true" />
+      <strong>{{ healthLabel }}</strong>
+    </span>
+
+    <span class="device-cell device-cell-event">
+      <strong>{{ latestEvent.label }}</strong>
+      <time>{{ latestEvent.time }}</time>
+    </span>
+
+    <ArrowRight20Regular class="device-row-arrow" aria-hidden="true" />
   </button>
 </template>
 
 <style scoped>
-.device-card { position: relative; min-width: 0; min-height: 188px; padding: 0; overflow: hidden; border-color: var(--ui-border); border-radius: var(--ui-radius-xl); background: linear-gradient(145deg, color-mix(in srgb, var(--ui-surface) 98%, var(--ui-primary) 2%), var(--ui-surface)); color: var(--ui-text); text-align: left; cursor: pointer; }
-.device-card.is-vowifi { min-height: 112px; }
-.device-card-selected { border-color: color-mix(in srgb, var(--ui-primary) 58%, var(--ui-border)); background: linear-gradient(150deg, color-mix(in srgb, var(--ui-surface) 84%, var(--ui-primary) 16%), var(--ui-surface) 62%); box-shadow: 0 0 0 1px color-mix(in srgb, var(--ui-primary) 8%, transparent), var(--ui-shadow-md); }
-.device-card-header { min-height: 62px; padding: 10px 14px; display: flex; align-items: center; justify-content: space-between; gap: 12px; }
-.device-title-group { min-width: 0; display: flex; align-items: center; gap: 11px; }
-.device-glyph { width: 36px; height: 36px; flex: 0 0 36px; display: grid; place-items: center; border: 1px solid color-mix(in srgb, var(--ui-primary) 35%, var(--ui-border)); border-radius: var(--ui-radius-sm); background: color-mix(in srgb, var(--ui-primary) 12%, transparent); color: var(--ui-primary); }
-.device-glyph svg { width: 20px; height: 20px; }
-.device-identity { min-width: 0; display: grid; }
-.device-identity strong,
-.device-identity small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.device-identity strong { font-size: 15px; font-weight: 700; }
-.device-identity small { max-width: 190px; margin-top: 3px; color: var(--ui-text-muted); font-size: var(--ui-font-caption); }
-.device-state { flex: 0 0 auto; display: inline-flex; align-items: center; gap: 7px; font-size: 12px; font-weight: 650; }
-.device-state i { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
-.device-state.is-online { color: var(--ui-success); }
-.device-state.is-offline { color: var(--ui-danger); }
-.device-state.is-online i { animation: device-online-pulse 2.4s var(--ui-ease-in-out) infinite; }
+.device-card {
+  width: 100%;
+  min-width: 0;
+  min-height: 72px;
+  padding: 10px 12px;
+  display: grid;
+  grid-template-columns: minmax(150px, 1.15fr) 92px minmax(110px, .9fr) minmax(104px, .85fr) minmax(132px, 1fr) 20px;
+  align-items: center;
+  gap: 14px;
+  border: 0;
+  border-bottom: 1px solid var(--ui-border);
+  background: transparent;
+  color: var(--ui-text);
+  text-align: left;
+  cursor: pointer;
+  transition: background-color 160ms var(--ui-ease-out), box-shadow 160ms var(--ui-ease-out);
+}
+.device-card:first-of-type { border-top: 1px solid var(--ui-border); }
+.device-card-selected { background: color-mix(in srgb, var(--ui-primary) 7%, transparent); box-shadow: 3px 0 0 var(--ui-primary) inset; }
+.device-cell { min-width: 0; }
+.device-cell strong,
+.device-cell small,
+.device-cell time { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
-.device-connection-summary { min-height: 50px; padding: 8px 14px; display: flex; align-items: center; border-top: 1px solid var(--ui-border-muted); border-bottom: 1px solid var(--ui-border-muted); background: radial-gradient(ellipse at center, color-mix(in srgb, var(--ui-primary) 5%, transparent), transparent 70%); }
-.connection-primary { min-width: 0; display: flex; align-items: center; gap: 10px; }
-.connection-primary > svg { width: 21px; height: 21px; flex: 0 0 21px; color: var(--ui-primary); }
-.connection-primary > span { min-width: 0; display: grid; gap: 3px; }
-.connection-primary strong,
-.connection-primary small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.connection-primary strong { font-size: 14px; }
-.connection-primary small { color: var(--ui-text-muted); font-size: var(--ui-font-caption); }
-.device-card-footer { min-height: 76px; padding: 8px 12px 8px 14px; display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 10px; }
-.device-addresses { min-width: 0; display: grid; }
-.address-heading { display: flex; align-items: flex-start; gap: 7px; color: var(--ui-text-muted); font-size: var(--ui-font-caption); }
-.address-heading svg { width: 16px; height: 16px; flex: 0 0 16px; }
-.address-list { min-width: 0; margin-top: 4px; display: grid; gap: 2px; }
-.address-list > span { min-width: 0; display: grid; grid-template-columns: 34px minmax(0, 1fr); gap: 6px; }
-.address-list small { color: var(--ui-text-muted); font: var(--ui-font-caption)/1.45 "v-mono", monospace; }
-.address-list code { min-width: 0; color: color-mix(in srgb, var(--ui-text) 82%, transparent); font: var(--ui-font-body-sm)/1.35 "v-mono", monospace; overflow-wrap: anywhere; }
-.device-signal { align-self: center; display: grid; gap: 7px; }
-.signal-label,
-.signal-reading { display: flex; align-items: center; gap: 6px; }
-.signal-label { color: var(--ui-text-muted); font-size: var(--ui-font-caption); }
-.signal-label svg { width: 16px; height: 16px; }
-.signal-reading { color: var(--ui-text-muted); }
-.signal-reading.is-good { color: var(--ui-success); }
-.signal-reading.is-warning { color: var(--ui-warning); }
-.signal-reading.is-danger { color: var(--ui-danger); }
-.signal-reading strong { font: var(--ui-font-body-sm) "v-mono", monospace; }
-.signal-bars { width: 20px; height: 14px; display: flex; align-items: flex-end; gap: 2px; }
-.signal-bars i { width: 3px; height: calc(var(--bar-index, 1) * 25%); min-height: 3px; border-radius: 1px; background: color-mix(in srgb, currentColor 24%, transparent); }
+.device-cell-identity { display: grid; grid-template-columns: 8px minmax(0, 1fr); align-items: center; gap: 10px; }
+.device-state-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--ui-text-muted); }
+.device-state-dot.is-online { background: var(--ui-success); }
+.device-state-dot.is-offline { background: var(--ui-danger); }
+.device-identity-copy { min-width: 0; display: grid; gap: 4px; }
+.device-identity-copy strong { font-size: 14px; font-weight: 700; }
+.device-identity-copy small { color: var(--ui-text-muted); font-size: var(--ui-font-caption); }
+
+.device-cell-signal { display: grid; justify-items: start; gap: 5px; color: var(--ui-text-muted); }
+.device-cell-signal.is-good { color: var(--ui-success); }
+.device-cell-signal.is-warning { color: var(--ui-warning); }
+.device-cell-signal.is-danger { color: var(--ui-danger); }
+.device-cell-signal small { color: var(--ui-text-muted); font: var(--ui-font-caption) "v-mono", ui-monospace, monospace; }
+.signal-bars { width: 28px; height: 18px; display: flex; align-items: flex-end; gap: 3px; }
+.signal-bars i { width: 4px; border-radius: 1px; background: color-mix(in srgb, currentColor 22%, transparent); }
 .signal-bars i:nth-child(1) { height: 25%; }
 .signal-bars i:nth-child(2) { height: 50%; }
 .signal-bars i:nth-child(3) { height: 75%; }
 .signal-bars i:nth-child(4) { height: 100%; }
 .signal-bars i.is-filled { background: currentColor; }
 
-@keyframes device-online-pulse { 0%, 100% { opacity: .55; } 50% { opacity: 1; } }
+.device-cell-operator,
+.device-cell-event { display: grid; gap: 4px; }
+.device-cell-operator strong,
+.device-cell-event strong { font-size: 13px; font-weight: 650; }
+.device-cell-operator small,
+.device-cell-event time { color: var(--ui-text-muted); font-size: var(--ui-font-caption); }
+.device-cell-event time { font-family: "v-mono", ui-monospace, monospace; }
+
+.device-cell-health { display: flex; align-items: center; gap: 7px; color: var(--ui-text-muted); }
+.device-cell-health svg { width: 18px; height: 18px; flex: 0 0 18px; }
+.device-cell-health strong { font-size: var(--ui-font-caption); font-weight: 700; }
+.device-cell-health.is-success { color: var(--ui-success); }
+.device-cell-health.is-warning { color: var(--ui-warning); }
+.device-cell-health.is-danger { color: var(--ui-danger); }
+.device-row-arrow { width: 18px; height: 18px; color: var(--ui-text-muted); }
+
+@media (hover: hover) and (pointer: fine) {
+  .device-card:hover { background: color-mix(in srgb, var(--ui-primary) 5%, transparent); }
+}
+
+@container fleet-panel (max-width: 700px) {
+  .device-card { grid-template-columns: minmax(138px, 1.2fr) 82px minmax(100px, .9fr) minmax(126px, 1fr) 20px; gap: 10px; }
+  .device-cell-operator { display: none; }
+}
+
+@container fleet-panel (max-width: 520px) {
+  .device-card { min-height: 82px; grid-template-columns: minmax(0, 1fr) auto 18px; grid-template-rows: auto auto; gap: 7px 12px; padding: 11px 8px; }
+  .device-cell-identity { grid-column: 1; grid-row: 1; }
+  .device-cell-signal { grid-column: 2; grid-row: 1; display: flex; align-items: center; gap: 7px; }
+  .device-cell-health { grid-column: 1; grid-row: 2; padding-left: 18px; }
+  .device-cell-event { grid-column: 2; grid-row: 2; justify-items: end; }
+  .device-row-arrow { grid-column: 3; grid-row: 1 / span 2; }
+}
 
 @media (prefers-reduced-motion: reduce) {
-  .device-state.is-online i { animation: none; }
+  .device-card { transition: none; }
 }
 </style>

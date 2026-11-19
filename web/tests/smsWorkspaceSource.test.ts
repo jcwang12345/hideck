@@ -60,13 +60,14 @@ test('send dialog lays out the recipient input and contact picker without an app
   assert.doesNotMatch(smsView, /template #append/)
 })
 
-test('narrow SMS workspace keeps all three panes visible in the prototype composition', () => {
+test('narrow SMS workspace keeps all panes mounted and reveals one mobile stage at a time', () => {
   assert.doesNotMatch(smsView, /v-if="showDeviceSidebar"/)
   assert.doesNotMatch(smsView, /v-if="showListPane"/)
   assert.doesNotMatch(smsView, /v-if="showDetailPane"/)
-  assert.match(smsView, /grid-template-columns:\s*64px minmax\(0, 1fr\)/)
-  assert.match(smsView, /grid-template-rows:\s*250px minmax\(620px, 1fr\)/)
-  assert.match(smsView, /grid-template-columns:\s*52px minmax\(0, 1fr\)/)
+  assert.match(smsView, /:data-mobile-stage="mobileStage"/)
+  assert.match(smsView, /\.sms-main-layout > :deep\(\.sms-stage-pane\) \{[\s\S]*display: none !important;/)
+  assert.match(smsView, /data-mobile-stage="devices"[\s\S]*data-mobile-stage="threads"[\s\S]*data-mobile-stage="conversation"/)
+  assert.match(smsView, /display: flex !important;/)
   assert.match(smsView, /@media \(prefers-reduced-motion: reduce\)/)
 })
 

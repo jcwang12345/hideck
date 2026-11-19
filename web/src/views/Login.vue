@@ -272,20 +272,20 @@ async function redirectAfterLogin() {
 
 <style scoped>
 .login-page {
-  width: min(1080px, calc(100% - 40px));
-  min-height: 650px;
+  width: min(1024px, calc(100% - 40px));
+  min-height: 620px;
   display: grid;
-  grid-template-columns: minmax(0, 1.08fr) minmax(380px, .92fr);
+  grid-template-columns: minmax(0, 1.04fr) minmax(380px, .86fr);
   overflow: hidden;
   border: 1px solid var(--ui-border);
   border-radius: var(--ui-radius-xl);
   background: var(--ui-surface);
-  box-shadow: var(--ui-shadow-lg);
+  box-shadow: var(--ui-shadow-md);
 }
 
 .login-identity {
   position: relative;
-  padding: 38px 42px;
+  padding: 34px 38px;
   display: flex;
   flex-direction: column;
   justify-content: space-between;
@@ -353,7 +353,7 @@ async function redirectAfterLogin() {
 .network-label {
   position: absolute;
   color: color-mix(in srgb, var(--ui-accent) 66%, transparent);
-  font: 9px/1 "v-mono", ui-monospace, monospace;
+  font: 9px/1 var(--ui-font-mono);
 }
 
 .label-a { top: 14%; left: 29%; }
@@ -374,16 +374,16 @@ async function redirectAfterLogin() {
 }
 
 .identity-mark {
-  width: 38px;
-  height: 38px;
+  width: 36px;
+  height: 36px;
   display: grid;
   place-items: center;
   border: 1px solid var(--ui-accent);
-  border-radius: 50%;
+  border-radius: var(--ui-radius-md);
   background: var(--ui-accent);
   color: #fff;
-  font-size: 18px;
-  font-weight: 700;
+  font-size: 17px;
+  font-weight: 600;
 }
 
 .identity-topline div {
@@ -392,14 +392,15 @@ async function redirectAfterLogin() {
 }
 
 .identity-topline strong {
-  font-size: 18px;
+  font-size: 17px;
+  font-weight: 600;
   line-height: 1.1;
 }
 
 .identity-topline div span,
 .identity-kicker,
 .form-kicker {
-  font-family: "v-mono", ui-monospace, monospace;
+  font-family: var(--ui-font-mono);
   letter-spacing: 0;
 }
 
@@ -417,13 +418,14 @@ async function redirectAfterLogin() {
 .form-kicker {
   color: var(--ui-accent);
   font-size: 12px;
-  font-weight: 700;
+  font-weight: 500;
+  letter-spacing: .06em;
 }
 
 .identity-copy h1 {
-  margin: 13px 0 14px;
-  font-size: 44px;
-  font-weight: 580;
+  margin: 10px 0 12px;
+  font-size: 40px;
+  font-weight: 600;
   line-height: 1.15;
   letter-spacing: 0;
 }
@@ -435,14 +437,14 @@ async function redirectAfterLogin() {
 }
 
 .signal-panel {
-  min-height: 72px;
-  padding: 14px 16px;
+  min-height: 64px;
+  padding: 12px 14px;
   display: grid;
   grid-template-columns: 38px 1fr auto;
   align-items: center;
-  gap: 14px;
+  gap: 12px;
   border: 1px solid var(--ui-border);
-  border-radius: var(--ui-radius-xl);
+  border-radius: var(--ui-radius-lg);
   background: var(--ui-surface);
 }
 
@@ -471,7 +473,7 @@ async function redirectAfterLogin() {
 }
 
 .signal-panel strong {
-  font-family: "v-mono", ui-monospace, monospace;
+  font-family: var(--ui-font-mono);
   font-size: 12px;
 }
 
@@ -489,9 +491,10 @@ async function redirectAfterLogin() {
 }
 
 .login-access {
-  padding: 52px;
+  padding: 44px;
   display: grid;
   place-items: center;
+  border-left: 1px solid var(--ui-border);
   background: var(--ui-surface);
 }
 
@@ -500,14 +503,14 @@ async function redirectAfterLogin() {
 }
 
 .login-form-wrap header {
-  margin-bottom: 32px;
+  margin-bottom: 26px;
 }
 
 .login-form-wrap h2 {
-  margin: 9px 0 7px;
+  margin: 7px 0 5px;
   color: var(--ui-text);
-  font-size: 26px;
-  font-weight: 700;
+  font-size: 24px;
+  font-weight: 600;
   letter-spacing: 0;
 }
 
@@ -526,17 +529,17 @@ label {
   margin-top: 7px;
   color: var(--ui-text);
   font-size: 13px;
-  font-weight: 650;
+  font-weight: 500;
 }
 
 .field-shell {
-  height: 46px;
-  padding: 0 16px;
+  height: 44px;
+  padding: 0 13px;
   display: flex;
   align-items: center;
   gap: 10px;
   border: 1px solid var(--ui-border);
-  border-radius: 16px;
+  border-radius: var(--ui-radius-input);
   background: var(--ui-surface);
   color: var(--ui-text-muted);
   transition: border-color 160ms ease, box-shadow 160ms ease;
@@ -564,17 +567,17 @@ input {
 }
 
 button {
-  height: 46px;
-  margin-top: 18px;
+  height: 44px;
+  margin-top: 16px;
   display: flex;
   align-items: center;
   justify-content: center;
   gap: 9px;
   border: 0;
-  border-radius: var(--ui-radius-pill);
+  border-radius: var(--ui-radius-md);
   background: var(--ui-primary-solid);
   color: #fff;
-  font-weight: 700;
+  font-weight: 600;
   cursor: pointer;
   transition: background-color 160ms ease;
 }
@@ -593,9 +596,9 @@ button svg { width: 18px; height: 18px; }
 }
 
 .login-form-wrap footer {
-  margin-top: 30px;
+  margin-top: 26px;
   color: var(--ui-text-muted);
-  font-family: "v-mono", ui-monospace, monospace;
+  font-family: var(--ui-font-mono);
   font-size: 12px;
   text-align: center;
 }
@@ -630,7 +633,7 @@ button svg { width: 18px; height: 18px; }
   width: 100%;
   height: 44px;
   margin: 0;
-  border-radius: var(--ui-radius-pill);
+  border-radius: var(--ui-radius-md);
 }
 
 .password-change-actions :deep(.el-button:not(.el-button--primary)) {
@@ -643,19 +646,53 @@ button svg { width: 18px; height: 18px; }
 
 @media (max-width: 800px) {
   .login-page {
-    width: min(520px, calc(100% - 24px));
+    width: min(520px, 100%);
     min-height: 0;
     grid-template-columns: 1fr;
   }
 
   .login-identity {
-    min-height: 210px;
-    padding: 24px;
+    min-height: 196px;
+    padding: 22px;
   }
 
   .identity-copy h1 { font-size: 28px; }
   .identity-copy p { display: none; }
   .signal-panel { display: none; }
-  .login-access { padding: 32px 24px; }
+  .login-access {
+    padding: 30px 24px;
+    border-top: 1px solid var(--ui-border);
+    border-left: 0;
+  }
+}
+
+@media (max-width: 480px) {
+  .login-identity {
+    min-height: 174px;
+    padding: 18px;
+  }
+
+  .identity-copy h1 {
+    margin-bottom: 0;
+    font-size: 26px;
+  }
+
+  .login-access {
+    padding: 24px 18px;
+  }
+
+  .login-form-wrap header {
+    margin-bottom: 20px;
+  }
+
+  .password-change-actions {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (max-height: 720px) and (min-width: 801px) {
+  .login-page {
+    min-height: 560px;
+  }
 }
 </style>
