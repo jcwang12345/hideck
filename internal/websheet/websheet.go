@@ -28,6 +28,7 @@ const (
 	defaultTTL             = 10 * time.Minute
 	defaultClientTimeout   = 45 * time.Second
 	defaultBasePath        = "/api/websheets"
+	browserCookiePrefix    = "hideck_websheet_"
 	callbackURLToken       = "{{CALLBACK_URL}}"
 	targetQueryParam       = "target_query"
 	bootstrapBodyParam     = "bootstrap_body"
@@ -256,6 +257,11 @@ func (s *Session) Authorize(r *http.Request) error {
 		if token == "" {
 			token = strings.TrimSpace(r.Header.Get("X-Websheet-Token"))
 		}
+		if token == "" {
+			if cookie, err := r.Cookie(s.browserCookieName()); err == nil {
+				token = strings.TrimSpace(cookie.Value)
+			}
+		}
 	}
 	if token == "" || s.accessToken == "" {
 		return ErrUnauthorized
@@ -301,6 +307,7 @@ func (s *Session) ServeBootstrap(w http.ResponseWriter, r *http.Request) error {
 		return ErrExpired
 	}
 	token := strings.TrimSpace(r.URL.Query().Get("token"))
+	s.setBrowserAuthCookie(w)
 	target := *s.target
 	if s.method() == http.MethodGet && s.userData != "" {
 		appendRawQuery(&target, s.userData)
@@ -316,6 +323,27 @@ func (s *Session) ServeBootstrap(w http.ResponseWriter, r *http.Request) error {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	_, err := io.WriteString(w, s.postBootstrapHTML(proxyURL))
 	return err
+}
+
+func (s *Session) browserCookieName() string {
+	return browserCookiePrefix + s.id
+}
+
+func (s *Session) setBrowserAuthCookie(w http.ResponseWriter) {
+	maxAge := int(s.expiresAt.Sub(s.now()).Seconds())
+	if maxAge < 1 {
+		maxAge = 1
+	}
+	http.SetCookie(w, &http.Cookie{
+		Name:     s.browserCookieName(),
+		Value:    s.accessToken,
+		Path:     s.basePath + "/" + url.PathEscape(s.id) + "/",
+		Expires:  s.expiresAt,
+		MaxAge:   maxAge,
+		Secure:   true,
+		HttpOnly: true,
+		SameSite: http.SameSiteStrictMode,
+	})
 }
 
 func (s *Session) Proxy(w http.ResponseWriter, r *http.Request) error {
@@ -353,20 +381,25 @@ func (s *Session) Proxy(w http.ResponseWriter, r *http.Request) error {
 		return fmt.Errorf("create websheet request: %w", err)
 	}
 	bootstrap := r.URL.Query().Get(bootstrapBodyParam) == "1"
+	if body != nil && !bootstrap && r.ContentLength >= 0 {
+		req.ContentLength = r.ContentLength
+	}
 	copyProxyHeaders(req.Header, r.Header)
 	applyHeaderProfile(req.Header, s.headerProfile, bootstrap)
 	if !bootstrap {
+		referer := s.upstreamReferer(r)
+		if referer != "" {
+			req.Header.Set("Referer", referer)
+		}
 		origin := targetOrigin(target)
-		if origin != "" {
-			req.Header.Set("Referer", origin+"/")
-			if body != nil {
-				req.Header.Set("Origin", origin)
-			}
+		if refererURL, parseErr := url.Parse(referer); parseErr == nil && targetOrigin(refererURL) != "" {
+			origin = targetOrigin(refererURL)
+		}
+		if body != nil && origin != "" {
+			req.Header.Set("Origin", origin)
 		}
 	}
 	if bootstrap && s.contentType != "" {
-		req.Header.Set("Content-Type", s.contentType)
-	} else if req.Header.Get("Content-Type") == "" && s.contentType != "" {
 		req.Header.Set("Content-Type", s.contentType)
 	}
 	resp, err := s.client.Do(req)
@@ -461,6 +494,29 @@ func (s *Session) proxyPathTarget(r *http.Request) string {
 		target.Path = "/"
 	}
 	target.RawQuery = r.URL.Query().Get(targetQueryParam)
+	return target.String()
+}
+
+func (s *Session) upstreamReferer(r *http.Request) string {
+	if r == nil {
+		return ""
+	}
+	raw := strings.TrimSpace(r.Referer())
+	if raw == "" {
+		return ""
+	}
+	parsed, err := url.Parse(raw)
+	if err != nil {
+		return ""
+	}
+	upstream := s.proxyPathTarget(&http.Request{URL: parsed})
+	if upstream == "" {
+		return ""
+	}
+	target, err := parseAllowedURL(r.Context(), upstream, s.allowPrivateHosts)
+	if err != nil {
+		return ""
+	}
 	return target.String()
 }
 
@@ -645,9 +701,27 @@ func applyHeaderProfile(header http.Header, profile string, bootstrap bool) {
 	if !strings.EqualFold(strings.TrimSpace(profile), HeaderProfileIOSSafari) {
 		return
 	}
+	preserved := make(http.Header)
+	if !bootstrap {
+		for _, key := range []string{
+			"Accept", "Cache-Control", "Content-Type", "If-Modified-Since", "If-None-Match",
+			"Pragma", "Range", "X-CSRF-Token", "X-Requested-With", "X-XSRF-Token",
+		} {
+			for _, value := range header.Values(key) {
+				preserved.Add(key, value)
+			}
+		}
+	}
+	// The browser is only rendering a same-origin relay. Its native Chromium
+	// headers do not describe the upstream request. Forwarding them beside an
+	// iOS Safari user agent produces an internally inconsistent fingerprint that
+	// carrier WAFs reject, including for scripts and styles after the bootstrap.
 	for key := range header {
-		if strings.HasPrefix(strings.ToLower(key), "sec-ch-ua") {
-			header.Del(key)
+		header.Del(key)
+	}
+	for key, values := range preserved {
+		for _, value := range values {
+			header.Add(key, value)
 		}
 	}
 	header.Set("User-Agent", iosSafariUserAgent)

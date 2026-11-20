@@ -61,6 +61,28 @@ func TestInfoEmbedURLCarriesSessionAccessToken(t *testing.T) {
 	if err := s.Authorize(missingReq); !errors.Is(err, ErrUnauthorized) {
 		t.Fatalf("Authorize(missing token) error=%v, want ErrUnauthorized", err)
 	}
+
+	bootstrapRec := httptest.NewRecorder()
+	if err := s.ServeBootstrap(bootstrapRec, validReq); err != nil {
+		t.Fatal(err)
+	}
+	cookies := bootstrapRec.Result().Cookies()
+	if len(cookies) != 1 {
+		t.Fatalf("bootstrap cookies=%v, want one path-scoped authorization cookie", cookies)
+	}
+	cookie := cookies[0]
+	if cookie.Name != s.browserCookieName() || !cookie.Secure || !cookie.HttpOnly || cookie.SameSite != http.SameSiteStrictMode {
+		t.Fatalf("bootstrap cookie flags=%+v", cookie)
+	}
+	wantPath := s.basePath + "/" + url.PathEscape(s.id) + "/"
+	if cookie.Path != wantPath {
+		t.Fatalf("bootstrap cookie path=%q want %q", cookie.Path, wantPath)
+	}
+	cookieReq := httptest.NewRequest(http.MethodGet, wantPath+"proxy/https/example.com/logo.svg", nil)
+	cookieReq.AddCookie(cookie)
+	if err := s.Authorize(cookieReq); err != nil {
+		t.Fatalf("Authorize(path-scoped cookie) error=%v", err)
+	}
 }
 
 func TestPostBootstrapProxiesRawUserDataBody(t *testing.T) {
@@ -138,6 +160,11 @@ func TestIOSSafariProfileNormalizesBootstrapRequest(t *testing.T) {
 	proxyReq.Header.Set("User-Agent", "Mozilla/5.0 Chrome/131.0")
 	proxyReq.Header.Set("Sec-CH-UA", `"Chromium";v="131"`)
 	proxyReq.Header.Set("Sec-CH-UA-Platform", `"macOS"`)
+	proxyReq.Header.Set("Priority", "u=0, i")
+	proxyReq.Header.Set("Upgrade-Insecure-Requests", "1")
+	proxyReq.Header.Set("DNT", "1")
+	proxyReq.Header.Set("Sec-GPC", "1")
+	proxyReq.Header.Set("X-Browser-Only", "chrome")
 	proxyReq.Header.Set("Content-Type", "application/json")
 	proxyReq.Header.Set("Origin", "https://hideck.example")
 	proxyRec := httptest.NewRecorder()
@@ -151,11 +178,108 @@ func TestIOSSafariProfileNormalizesBootstrapRequest(t *testing.T) {
 	if gotHeader.Get("Sec-CH-UA") != "" || gotHeader.Get("Sec-CH-UA-Platform") != "" {
 		t.Fatalf("client hints leaked upstream: %v", gotHeader)
 	}
+	for _, key := range []string{"Priority", "Upgrade-Insecure-Requests", "DNT", "Sec-GPC", "X-Browser-Only"} {
+		if value := gotHeader.Get(key); value != "" {
+			t.Fatalf("bootstrap browser header %s leaked upstream: %q", key, value)
+		}
+	}
 	if gotHeader.Get("Origin") != "" || gotHeader.Get("Referer") != "" {
 		t.Fatalf("bootstrap forged origin headers: origin=%q referer=%q", gotHeader.Get("Origin"), gotHeader.Get("Referer"))
 	}
 	if gotHeader.Get("Content-Type") != "application/x-www-form-urlencoded" {
 		t.Fatalf("Content-Type=%q", gotHeader.Get("Content-Type"))
+	}
+}
+
+func TestSecondHopPreservesFormLengthAndDoesNotInventContentType(t *testing.T) {
+	type observedRequest struct {
+		method        string
+		body          string
+		contentType   string
+		contentLength int64
+		transfer      []string
+		referer       string
+		origin        string
+		priority      string
+	}
+	requests := make(chan observedRequest, 2)
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		requests <- observedRequest{
+			method:        r.Method,
+			body:          string(body),
+			contentType:   r.Header.Get("Content-Type"),
+			contentLength: r.ContentLength,
+			transfer:      append([]string(nil), r.TransferEncoding...),
+			referer:       r.Referer(),
+			origin:        r.Header.Get("Origin"),
+			priority:      r.Header.Get("Priority"),
+		}
+		w.Header().Set("Content-Type", "text/plain")
+		_, _ = io.WriteString(w, "ok")
+	}))
+	defer upstream.Close()
+
+	b := New(Config{AllowPrivateHosts: true})
+	s, err := b.Create(context.Background(), Request{
+		URL:           upstream.URL + "/bootstrap",
+		UserData:      "signed=payload",
+		ContentType:   "application/x-www-form-urlencoded",
+		HeaderProfile: HeaderProfileIOSSafari,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	token := strings.SplitN(s.Info().EmbedURL, "token=", 2)[1]
+
+	getReq := httptest.NewRequest(http.MethodGet, s.proxyURL(upstream.URL+"/asset.js", token), nil)
+	getReq.Header.Set("Referer", "https://hideck.example"+s.proxyURL(upstream.URL+"/address", token))
+	getReq.Header.Set("Priority", "u=1")
+	getRec := httptest.NewRecorder()
+	if err := s.Proxy(getRec, getReq); err != nil {
+		t.Fatal(err)
+	}
+	gotGET := <-requests
+	if gotGET.contentType != "" {
+		t.Fatalf("second-hop GET Content-Type=%q, want empty", gotGET.contentType)
+	}
+	if gotGET.referer != upstream.URL+"/address" {
+		t.Fatalf("second-hop GET Referer=%q want %q", gotGET.referer, upstream.URL+"/address")
+	}
+	if gotGET.priority != "" {
+		t.Fatalf("second-hop GET leaked browser Priority=%q", gotGET.priority)
+	}
+
+	body := "street=1+Main+St&city=Seattle"
+	postReq := httptest.NewRequest(http.MethodPost, s.proxyURL(upstream.URL+"/submit", token), strings.NewReader(body))
+	postReq.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	postReq.Header.Set("Referer", "https://hideck.example"+s.proxyURL(upstream.URL+"/address", token))
+	postRec := httptest.NewRecorder()
+	if err := s.Proxy(postRec, postReq); err != nil {
+		t.Fatal(err)
+	}
+	gotPOST := <-requests
+	if gotPOST.body != body {
+		t.Fatalf("second-hop POST body=%q want %q", gotPOST.body, body)
+	}
+	if gotPOST.contentLength != int64(len(body)) {
+		t.Fatalf("second-hop POST ContentLength=%d want %d", gotPOST.contentLength, len(body))
+	}
+	if len(gotPOST.transfer) != 0 {
+		t.Fatalf("second-hop POST Transfer-Encoding=%v, want none", gotPOST.transfer)
+	}
+	if gotPOST.contentType != "application/x-www-form-urlencoded" {
+		t.Fatalf("second-hop POST Content-Type=%q", gotPOST.contentType)
+	}
+	if gotPOST.referer != upstream.URL+"/address" {
+		t.Fatalf("second-hop POST Referer=%q want %q", gotPOST.referer, upstream.URL+"/address")
+	}
+	upstreamURL, err := url.Parse(upstream.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if gotPOST.origin != targetOrigin(upstreamURL) {
+		t.Fatalf("second-hop POST Origin=%q want %q", gotPOST.origin, targetOrigin(upstreamURL))
 	}
 }
 
