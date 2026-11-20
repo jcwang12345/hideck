@@ -78,10 +78,10 @@ func New(database *gorm.DB, now func() time.Time) (*Service, error) {
 	if database == nil {
 		return nil, errors.New("dispatch: database is required")
 	}
-	location, err := time.LoadLocation("Asia/Shanghai")
-	if err != nil {
-		return nil, fmt.Errorf("dispatch: load business timezone: %w", err)
-	}
+	// OpenWrt images commonly omit the IANA timezone database. China has used a
+	// constant UTC+8 offset since 1991, so an embedded fixed zone keeps dispatch
+	// accounting deterministic without requiring host zoneinfo files.
+	location := time.FixedZone("Asia/Shanghai", 8*60*60)
 	if now == nil {
 		now = time.Now
 	}

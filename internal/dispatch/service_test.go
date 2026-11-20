@@ -31,6 +31,19 @@ func eligibleCandidate(device, card, profile, number string) Candidate {
 	return Candidate{PoolID: "pool-1", DeviceID: device, CardID: card, ProfileID: profile, NumberID: number, Online: true, Enabled: true}
 }
 
+func TestNewUsesEmbeddedChinaStandardTime(t *testing.T) {
+	now := time.Date(2026, 11, 20, 16, 30, 0, 0, time.UTC)
+	service, _ := newTestService(t, &now)
+
+	if got := service.businessDate(now); got != "2026-11-21" {
+		t.Fatalf("business date=%q want 2026-11-21", got)
+	}
+	name, offset := now.In(service.location).Zone()
+	if name != "Asia/Shanghai" || offset != 8*60*60 {
+		t.Fatalf("zone=(%q, %d) want (Asia/Shanghai, 28800)", name, offset)
+	}
+}
+
 func TestReservePrefersReadyThenLeastUsed(t *testing.T) {
 	now := time.Date(2026, 11, 20, 9, 0, 0, 0, time.FixedZone("CST", 8*3600))
 	service, _ := newTestService(t, &now)

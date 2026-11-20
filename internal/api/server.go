@@ -240,6 +240,7 @@ func (s *Server) initializeResources() {
 	dispatcher, err := dispatch.New(db.DB, time.Now)
 	if err != nil {
 		s.resourceInitErr = err
+		logger.Error("资源调度服务初始化失败", "err", err)
 		return
 	}
 	s.dispatcher = dispatcher
