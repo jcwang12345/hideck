@@ -9,20 +9,23 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"net/url"
 	"os"
 	"regexp"
 	"strings"
 	"unicode/utf8"
 
-	"github.com/yibaiba/hideck/pkg/logger"
 	runtimee911 "github.com/iniwex5/vowifi-go/runtimehost/e911"
+	"github.com/yibaiba/hideck/pkg/logger"
 )
 
 const maxEntitlementTraceBody = 64 * 1024
 
 var (
-	traceLongDigitsPattern = regexp.MustCompile(`\d{8,}`)
-	traceAuthTokenPattern  = regexp.MustCompile(`(?i)(authtoken(?:%3D|=))([^&\s"]+)`)
+	traceLongDigitsPattern  = regexp.MustCompile(`\d{8,}`)
+	traceAuthTokenPattern   = regexp.MustCompile(`(?i)(authtoken(?:%3D|=))([^&\s"]+)`)
+	traceNamedSecretPattern = regexp.MustCompile(`(?i)((?:eap-relay-packet|serviceflow_user_?data|signature|temporary_token|operator_token)(?:%3D|=|"\s*:\s*"))([^&\s"<]+)`)
+	traceXMLSecretPattern   = regexp.MustCompile(`(?i)(name\s*=\s*["'](?:ServiceFlow_User_?Data|signature)["'][^>]*\bvalue\s*=\s*["'])([^"']*)`)
 )
 
 type entitlementTraceSink struct {
@@ -57,7 +60,7 @@ func traceEntitlementRequest(deviceID string, req *runtimee911.HTTPRequest) {
 	logger.RunDebug("E911 entitlement request",
 		"device", deviceID,
 		"method", req.Method,
-		"url", req.URL,
+		"url", sanitizeEntitlementTraceURL(req.URL),
 		"trace_raw", raw,
 		"body_len", len(body),
 		"body", formatEntitlementTraceBody(body, raw))
@@ -68,12 +71,12 @@ func traceEntitlementResponse(deviceID, url string, statusCode int, body []byte)
 	body = decodeEntitlementTraceBody(body)
 	logger.RunDebug("E911 entitlement response",
 		"device", deviceID,
-		"url", url,
+		"url", sanitizeEntitlementTraceURL(url),
 		"http_status", statusCode,
 		"trace_raw", raw,
 		"body_len", len(body),
 		"body", formatEntitlementTraceBody(body, raw))
-	traceEntitlementPhoneNumberResponses(deviceID, url, body)
+	traceEntitlementPhoneNumberResponses(deviceID, sanitizeEntitlementTraceURL(url), body)
 }
 
 func traceEntitlementError(deviceID, url string, err error) {
@@ -82,8 +85,8 @@ func traceEntitlementError(deviceID, url string, err error) {
 	}
 	logger.RunWarn("E911 entitlement request failed",
 		"device", deviceID,
-		"url", url,
-		"err", err)
+		"url", sanitizeEntitlementTraceURL(url),
+		"err", redactEntitlementTraceString(err.Error()))
 }
 
 func decodeEntitlementTraceBody(body []byte) []byte {
@@ -182,12 +185,24 @@ func isSensitiveEntitlementTraceKey(key string) bool {
 	switch strings.ToLower(strings.TrimSpace(key)) {
 	case "token",
 		"app-token",
+		"authentication-token",
+		"temporary_token",
+		"operator_token",
 		"payload",
 		"subscriber-id",
+		"imsi",
+		"imei",
+		"eap_id",
+		"terminal_id",
+		"gid1",
 		"unique-id",
 		"sip-username",
 		"apns-token",
 		"challenge",
+		"eap-relay-packet",
+		"serviceflow_userdata",
+		"serviceflow_user_data",
+		"signature",
 		"address-update-url-post-data":
 		return true
 	default:
@@ -252,7 +267,28 @@ func parseEntitlementNAI(identity string) (imsi, mcc, mnc string, ok bool) {
 
 func redactEntitlementTraceString(s string) string {
 	s = traceAuthTokenPattern.ReplaceAllString(s, `${1}[REDACTED]`)
+	s = traceNamedSecretPattern.ReplaceAllString(s, `${1}[REDACTED]`)
+	s = traceXMLSecretPattern.ReplaceAllString(s, `${1}[REDACTED]`)
 	return traceLongDigitsPattern.ReplaceAllStringFunc(s, maskTraceLongDigits)
+}
+
+func sanitizeEntitlementTraceURL(raw string) string {
+	parsed, err := url.Parse(strings.TrimSpace(raw))
+	if err != nil {
+		return redactEntitlementTraceString(raw)
+	}
+	query := parsed.Query()
+	for key, values := range query {
+		if !isSensitiveEntitlementTraceKey(key) {
+			continue
+		}
+		for index := range values {
+			values[index] = "[REDACTED]"
+		}
+		query[key] = values
+	}
+	parsed.RawQuery = query.Encode()
+	return redactEntitlementTraceString(parsed.String())
 }
 
 func maskTraceLongDigits(s string) string {

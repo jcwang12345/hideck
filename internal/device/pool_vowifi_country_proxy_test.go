@@ -52,6 +52,29 @@ func TestResolveVoWiFiCountryProxySelectsUSProxy(t *testing.T) {
 	}
 }
 
+func TestResolveVoWiFiEntitlementProxyUsesVoWiFiCountryRoute(t *testing.T) {
+	openDeviceTestDB(t)
+	loadDeviceCountryTableFixture(t)
+	if err := db.UpsertUpstreamProxy(db.UpstreamProxy{
+		ID: "proxy-us-e911", Addr: "127.0.0.1:1089", Enabled: true,
+		CreatedAt: time.Now(), UpdatedAt: time.Now(),
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.UpsertUpstreamProxyCountryRule(db.UpstreamProxyCountryRule{
+		CountryCode: "US", UpstreamProxyID: "proxy-us-e911", Enabled: true,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	got, err := (&Pool{}).ResolveVoWiFiEntitlementProxy(context.Background(), "dev-1", "", "310")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got == nil || got.ID != "proxy-us-e911" || got.Addr != "127.0.0.1:1089" {
+		t.Fatalf("entitlement proxy=%+v, want proxy-us-e911", got)
+	}
+}
+
 func TestResolveVoWiFiCountryProxyDirectWhenNoCountryRule(t *testing.T) {
 	openDeviceTestDB(t)
 	loadDeviceCountryTableFixture(t)

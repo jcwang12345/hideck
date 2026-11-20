@@ -553,6 +553,23 @@ type voWiFiProxyResolveRequest struct {
 	ICCID    string
 }
 
+// ResolveVoWiFiEntitlementProxy applies the same card override and home-country
+// pool selection used by the active IKE/ePDG path. E911 entitlement therefore
+// leaves through the carrier route selected for VoWiFi instead of the router's
+// unrelated default Internet route.
+func (p *Pool) ResolveVoWiFiEntitlementProxy(ctx context.Context, deviceID, iccid, homeMCC string) (*runtimehost.ProxyConfig, error) {
+	if p == nil {
+		return nil, errors.New("VoWiFi proxy resolver is unavailable")
+	}
+	return resolveVoWiFiCountryProxy(voWiFiProxyResolveRequest{
+		Ctx:      ctx,
+		HomeMCC:  homeMCC,
+		TraceID:  runtimehost.NewTraceID(),
+		DeviceID: deviceID,
+		ICCID:    iccid,
+	})
+}
+
 func resolveVoWiFiCountryProxy(req voWiFiProxyResolveRequest) (*runtimehost.ProxyConfig, error) {
 	cfg, matched, err := resolveCardVoWiFiUpstreamProxy(req.ICCID, req.TraceID, req.DeviceID)
 	if err != nil {

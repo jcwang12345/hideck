@@ -17,6 +17,16 @@ func NewDefaultHTTPClient() HTTPClient {
 	return entitlementBackedHTTPClient{client: entitlement.NewDefaultHTTPClient()}
 }
 
+// NewSOCKS5HTTPClient returns the entitlement transport used by E911 while
+// preserving the carrier-facing TLS fingerprint through a VoWiFi SOCKS5 route.
+func NewSOCKS5HTTPClient(addr, username, password string) (HTTPClient, error) {
+	client, err := entitlement.NewSOCKS5HTTPClient(addr, username, password)
+	if err != nil {
+		return nil, err
+	}
+	return entitlementBackedHTTPClient{client: client}, nil
+}
+
 // StartEmergencyAddressUpdate is the v1.5.5 positional host API.
 func StartEmergencyAddressUpdate(
 	ctx context.Context,

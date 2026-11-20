@@ -21,6 +21,7 @@ type Identity struct {
 	IMEI        string
 	MCC         string
 	MNC         string
+	GID1        string
 	SIPUsername string
 	DisplayName string
 	CachedToken string

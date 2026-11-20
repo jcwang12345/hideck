@@ -15,15 +15,46 @@ import (
 
 	utls "github.com/refraction-networking/utls"
 	"golang.org/x/net/http2"
+	xproxy "golang.org/x/net/proxy"
 )
 
 const entitlementHTTPTimeout = 45 * time.Second
 
 func NewDefaultHTTPClient() HTTPClient {
+	return newHTTPClientWithDialer(nil)
+}
+
+// NewSOCKS5HTTPClient keeps the entitlement client's iOS-compatible TLS
+// fingerprint while routing every TCP connection through the selected VoWiFi
+// SOCKS5 egress. DNS names are handed to the proxy instead of being resolved
+// on the host.
+func NewSOCKS5HTTPClient(addr, username, password string) (HTTPClient, error) {
+	addr = strings.TrimSpace(addr)
+	if _, _, err := net.SplitHostPort(addr); err != nil {
+		return nil, fmt.Errorf("entitlement invalid SOCKS5 address: %w", err)
+	}
+	var auth *xproxy.Auth
+	if username != "" || password != "" {
+		auth = &xproxy.Auth{User: username, Password: password}
+	}
+	dialer, err := xproxy.SOCKS5("tcp", addr, auth, &net.Dialer{Timeout: entitlementHTTPTimeout})
+	if err != nil {
+		return nil, fmt.Errorf("entitlement create SOCKS5 dialer: %w", err)
+	}
+	contextDialer, ok := dialer.(xproxy.ContextDialer)
+	if !ok {
+		return nil, errors.New("entitlement SOCKS5 dialer does not support context cancellation")
+	}
+	return newHTTPClientWithDialer(contextDialer.DialContext), nil
+}
+
+type entitlementDialContext func(context.Context, string, string) (net.Conn, error)
+
+func newHTTPClientWithDialer(dial entitlementDialContext) HTTPClient {
 	return NewHTTPClientAdapter(&http.Client{
 		Transport: &fallbackRoundTripper{
-			primary:  newUTLSHTTP2Transport(),
-			fallback: newUTLSHTTP1Transport(),
+			primary:  newUTLSHTTP2Transport(dial),
+			fallback: newUTLSHTTP1Transport(dial),
 		},
 		Timeout: entitlementHTTPTimeout,
 	})
@@ -106,36 +137,51 @@ func validateURL(raw string) error {
 	return nil
 }
 
-func newUTLSHTTP1Transport() http.RoundTripper {
-	return &http.Transport{
+func newUTLSHTTP1Transport(dial entitlementDialContext) http.RoundTripper {
+	transport := &http.Transport{
 		ForceAttemptHTTP2: false,
 		DialTLSContext: func(ctx context.Context, network, address string) (net.Conn, error) {
-			return dialUTLSWithNextProtos(ctx, network, address, []string{"http/1.1"})
+			return dialUTLSWithNextProtosUsing(ctx, network, address, []string{"http/1.1"}, dial)
 		},
 	}
+	if dial != nil {
+		transport.DialContext = dial
+	}
+	return transport
 }
 
-func newUTLSHTTP2Transport() http.RoundTripper {
+func newUTLSHTTP2Transport(dial entitlementDialContext) http.RoundTripper {
 	return &http2.Transport{
 		DialTLSContext: func(ctx context.Context, network, address string, _ *tls.Config) (net.Conn, error) {
-			return dialUTLSWithNextProtos(ctx, network, address, []string{"h2", "http/1.1"})
+			return dialUTLSWithNextProtosUsing(ctx, network, address, []string{"h2", "http/1.1"}, dial)
 		},
 	}
 }
 
 func dialUTLSWithNextProtos(ctx context.Context, network, address string, nextProtos []string) (net.Conn, error) {
+	return dialUTLSWithNextProtosUsing(ctx, network, address, nextProtos, nil)
+}
+
+func dialUTLSWithNextProtosUsing(ctx context.Context, network, address string, nextProtos []string, dial entitlementDialContext) (net.Conn, error) {
 	ctx = contextOrBackground(ctx)
 	host, _, err := net.SplitHostPort(address)
 	if err != nil {
 		return nil, err
 	}
-	return dialUTLS(ctx, network, address, &utls.Config{
+	return dialUTLSUsing(ctx, network, address, &utls.Config{
 		ServerName: host, NextProtos: append([]string(nil), nextProtos...),
-	})
+	}, dial)
 }
 
 func dialUTLS(ctx context.Context, network, address string, config *utls.Config) (net.Conn, error) {
-	raw, err := (&net.Dialer{}).DialContext(ctx, network, address)
+	return dialUTLSUsing(ctx, network, address, config, nil)
+}
+
+func dialUTLSUsing(ctx context.Context, network, address string, config *utls.Config, dial entitlementDialContext) (net.Conn, error) {
+	if dial == nil {
+		dial = (&net.Dialer{}).DialContext
+	}
+	raw, err := dial(ctx, network, address)
 	if err != nil {
 		return nil, err
 	}

@@ -40,6 +40,9 @@ func StartEmergencyAddressUpdateCurrent(ctx context.Context, req Request) (Respo
 	if provider == attEntitlementProvider {
 		return startLegacyATTCurrent(ctx, req)
 	}
+	if isTMobileEntitlementProvider(provider) {
+		return startTMobileEntitlementFlow(ctx, req, endpoint, websheetURL)
+	}
 	if !supportedProvider(provider) {
 		return Response{}, ErrUnsupportedProvider
 	}
@@ -70,6 +73,9 @@ func requestCarrierSettings(req Request) (provider, websheetURL, endpoint string
 	endpoint = strings.TrimSpace(req.URL)
 	if endpoint == "" {
 		endpoint = strings.TrimSpace(cfg.E911.EntitlementEndpoint)
+	}
+	if endpoint == "" && isTMobileEntitlementProvider(provider) {
+		endpoint = strings.TrimSpace(cfg.E911.EntitlementURL)
 	}
 	if provider == "" && endpoint != "" {
 		provider = "att"

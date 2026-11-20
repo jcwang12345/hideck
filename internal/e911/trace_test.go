@@ -56,6 +56,43 @@ func TestFormatEntitlementTraceBodyRedactsSensitiveFields(t *testing.T) {
 	}
 }
 
+func TestFormatEntitlementTraceBodyRedactsTS43Secrets(t *testing.T) {
+	body := []byte(`{
+		"eap-relay-packet":"SECRET-RELAY",
+		"ServiceFlow_UserData":"SECRET-PORTAL-DATA",
+		"signature":"SECRET-SIGNATURE",
+		"terminal_id":"356306952769025"
+	}`)
+
+	got := formatEntitlementTraceBody(body, false)
+	for _, secret := range []string{"SECRET-RELAY", "SECRET-PORTAL-DATA", "SECRET-SIGNATURE", "356306952769025"} {
+		if strings.Contains(got, secret) {
+			t.Fatalf("trace body leaked %q: %s", secret, got)
+		}
+	}
+}
+
+func TestFormatEntitlementTraceBodyRedactsTS43XMLUserData(t *testing.T) {
+	body := []byte(`<parm name="ServiceFlow_UserData" value="SECRET-PORTAL-DATA"/>`)
+	got := formatEntitlementTraceBody(body, false)
+	if strings.Contains(got, "SECRET-PORTAL-DATA") || !strings.Contains(got, "[REDACTED]") {
+		t.Fatalf("trace body=%s", got)
+	}
+}
+
+func TestSanitizeEntitlementTraceURLRedactsTS43Identity(t *testing.T) {
+	raw := "https://ts43.example/ts43?app=ap2004&EAP_ID=0310260123456789%40nai.epc.mnc260.mcc310.3gppnetwork.org&terminal_id=356306952769025&GID1=A1B2"
+	got := sanitizeEntitlementTraceURL(raw)
+	for _, secret := range []string{"0310260123456789", "356306952769025", "A1B2"} {
+		if strings.Contains(got, secret) {
+			t.Fatalf("trace URL leaked %q: %s", secret, got)
+		}
+	}
+	if !strings.Contains(got, "app=ap2004") || !strings.Contains(got, "%5BREDACTED%5D") {
+		t.Fatalf("trace URL=%s", got)
+	}
+}
+
 func TestFormatEntitlementTraceBodyIncludesStableSensitiveFingerprints(t *testing.T) {
 	body := []byte(`{"unique-id":"356306952769025","action-name":"getAuthentication"}`)
 

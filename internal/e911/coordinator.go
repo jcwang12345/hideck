@@ -3,13 +3,14 @@ package e911
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 
+	"github.com/iniwex5/vowifi-go/runtimehost/carrier"
+	runtimee911 "github.com/iniwex5/vowifi-go/runtimehost/e911"
 	"github.com/yibaiba/hideck/internal/device"
 	"github.com/yibaiba/hideck/internal/modem"
 	"github.com/yibaiba/hideck/internal/websheet"
-	"github.com/iniwex5/vowifi-go/runtimehost/carrier"
-	runtimee911 "github.com/iniwex5/vowifi-go/runtimehost/e911"
 )
 
 // ErrNotSupported means device status does not support e911 updates.
@@ -56,17 +57,30 @@ func (c *Coordinator) StartWebsheet(ctx context.Context, deviceID string) (websh
 	}
 
 	akaProvider := device.BuildAKAProvider(w, deviceID)
+	identity := buildRuntimeE911Identity(status, mcc, mnc, displayName(w))
+	if strings.TrimSpace(identity.IMSI) == "" || strings.TrimSpace(identity.IMEI) == "" ||
+		strings.TrimSpace(identity.MCC) == "" || strings.TrimSpace(identity.MNC) == "" {
+		return websheet.Info{}, ErrIdentityUnavailable
+	}
 
 	var req websheet.Request
+	proxy, err := c.Pool.ResolveVoWiFiEntitlementProxy(ctx, deviceID, status.ICCID, mcc)
+	if err != nil {
+		return websheet.Info{}, fmt.Errorf("resolve E911 entitlement route: %w", err)
+	}
+	entitlementHTTPClient, err := entitlementClientForProxy(proxy)
+	if err != nil {
+		return websheet.Info{}, fmt.Errorf("configure E911 entitlement route: %w", err)
+	}
 
 	entitlementClient := httpClientAdapter{
 		deviceID: deviceID,
-		client:   runtimee911.NewDefaultHTTPClient(),
+		client:   entitlementHTTPClient,
 	}
 
 	websheetReq, err := runtimee911.StartEmergencyAddressUpdateCurrent(ctx, runtimee911.Request{
 		Carrier:     cfg,
-		Identity:    buildRuntimeE911Identity(status, mcc, mnc, displayName(w)),
+		Identity:    identity,
 		AKAProvider: akaProvider,
 		Client:      entitlementClient,
 		Trace:       entitlementTraceSink{deviceID: deviceID},
@@ -123,6 +137,7 @@ func buildRuntimeE911Identity(status modem.DeviceStatus, mcc, mnc, name string) 
 		IMEI:        status.IMEI,
 		MCC:         mcc,
 		MNC:         mnc,
+		GID1:        status.GID1,
 		SIPUsername: buildATTSIPUsername(status.IMSI),
 		DisplayName: name,
 	}

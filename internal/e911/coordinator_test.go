@@ -6,8 +6,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/yibaiba/hideck/internal/modem"
 	runtimee911 "github.com/iniwex5/vowifi-go/runtimehost/e911"
+	"github.com/yibaiba/hideck/internal/modem"
 )
 
 func TestCoordinatorDoesNotRunEntitlementProbes(t *testing.T) {
@@ -81,6 +81,7 @@ func TestBuildRuntimeE911IdentityIgnoresDebugCachedTokenEnv(t *testing.T) {
 		IMSI:  "310280233641503",
 		ICCID: "89014103212345678901",
 		IMEI:  "356306952701762",
+		GID1:  "A1B2",
 	}, "310", "280", "HiDeck")
 
 	if got.CachedToken != "" {
@@ -91,6 +92,9 @@ func TestBuildRuntimeE911IdentityIgnoresDebugCachedTokenEnv(t *testing.T) {
 	}
 	if got.ICCID != "89014103212345678901" {
 		t.Fatalf("ICCID=%q", got.ICCID)
+	}
+	if got.GID1 != "A1B2" {
+		t.Fatalf("GID1=%q", got.GID1)
 	}
 }
 
