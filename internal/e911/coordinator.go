@@ -72,6 +72,10 @@ func (c *Coordinator) StartWebsheet(ctx context.Context, deviceID string) (websh
 	if err != nil {
 		return websheet.Info{}, fmt.Errorf("configure E911 entitlement route: %w", err)
 	}
+	websheetTransport, err := websheetTransportForProxy(proxy)
+	if err != nil {
+		return websheet.Info{}, fmt.Errorf("configure E911 websheet route: %w", err)
+	}
 
 	entitlementClient := httpClientAdapter{
 		deviceID: deviceID,
@@ -103,6 +107,7 @@ func (c *Coordinator) StartWebsheet(ctx context.Context, deviceID string) (websh
 	req.UserData = websheetReq.UserData
 	req.ContentType = websheetReq.ContentType
 	req.Title = websheetReq.Title
+	req.Transport = websheetTransport
 
 	session, err := c.Websheets.Create(ctx, req)
 	if err != nil {

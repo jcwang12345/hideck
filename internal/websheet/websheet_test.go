@@ -106,6 +106,65 @@ func TestPostBootstrapProxiesRawUserDataBody(t *testing.T) {
 	}
 }
 
+func TestRequestTransportPersistsAcrossRedirectsAndCookies(t *testing.T) {
+	var cookieSeen bool
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/start":
+			http.SetCookie(w, &http.Cookie{Name: "carrier_session", Value: "ready", Path: "/"})
+			http.Redirect(w, r, "/address", http.StatusFound)
+		case "/address":
+			cookie, err := r.Cookie("carrier_session")
+			cookieSeen = err == nil && cookie.Value == "ready"
+			w.Header().Set("Content-Type", "text/html; charset=utf-8")
+			_, _ = io.WriteString(w, "<!doctype html><html><body>address form</body></html>")
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer upstream.Close()
+
+	transport := &countingRoundTripper{base: http.DefaultTransport}
+	b := New(Config{AllowPrivateHosts: true})
+	s, err := b.Create(context.Background(), Request{
+		URL:       upstream.URL + "/start",
+		Transport: transport,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	bootstrapReq := httptest.NewRequest(http.MethodGet, s.Info().EmbedURL, nil)
+	bootstrapRec := httptest.NewRecorder()
+	if err := s.ServeBootstrap(bootstrapRec, bootstrapReq); err != nil {
+		t.Fatal(err)
+	}
+	proxyReq := httptest.NewRequest(http.MethodGet, bootstrapRec.Header().Get("Location"), nil)
+	proxyRec := httptest.NewRecorder()
+	if err := s.Proxy(proxyRec, proxyReq); err != nil {
+		t.Fatal(err)
+	}
+	if proxyRec.Code != http.StatusOK {
+		t.Fatalf("status=%d body=%s", proxyRec.Code, proxyRec.Body.String())
+	}
+	if transport.calls != 2 {
+		t.Fatalf("transport calls=%d, want initial request plus redirect", transport.calls)
+	}
+	if !cookieSeen {
+		t.Fatal("carrier redirect did not retain the websheet cookie")
+	}
+}
+
+type countingRoundTripper struct {
+	base  http.RoundTripper
+	calls int
+}
+
+func (t *countingRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
+	t.calls++
+	return t.base.RoundTrip(req)
+}
+
 func TestRewriteHTMLKeepsProxyURLsRelativeToBrowserOrigin(t *testing.T) {
 	b := New(Config{AllowPrivateHosts: true})
 	s, err := b.Create(context.Background(), Request{URL: "https://attdashboard.wireless.att.com/softphone/primary/reseller/r017"})

@@ -64,6 +64,7 @@ type Request struct {
 	UserData    string
 	ContentType string
 	Title       string
+	Transport   http.RoundTripper
 }
 
 type Info struct {
@@ -163,15 +164,19 @@ func (b *Broker) Create(ctx context.Context, req Request) (*Session, error) {
 		callbackCh:        make(chan Callback, 1),
 		doneCh:            make(chan struct{}),
 	}
-	session.client = &http.Client{
-		Jar:     jar,
-		Timeout: defaultClientTimeout,
-		Transport: &http.Transport{
+	transport := req.Transport
+	if transport == nil {
+		transport = &http.Transport{
 			DialContext: (&net.Dialer{
 				Timeout: 10 * time.Second,
 				Control: safeDialControl(b.allowPrivateHosts),
 			}).DialContext,
-		},
+		}
+	}
+	session.client = &http.Client{
+		Jar:       jar,
+		Timeout:   defaultClientTimeout,
+		Transport: transport,
 		CheckRedirect: func(r *http.Request, via []*http.Request) error {
 			_, err := parseAllowedURL(r.Context(), r.URL.String(), b.allowPrivateHosts)
 			return err

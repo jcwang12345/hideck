@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/http"
 	"strings"
 
 	"github.com/iniwex5/vowifi-go/engine/sim"
@@ -25,6 +26,12 @@ func NewSOCKS5HTTPClient(addr, username, password string) (HTTPClient, error) {
 		return nil, err
 	}
 	return entitlementBackedHTTPClient{client: client}, nil
+}
+
+// NewSOCKS5HTTPTransport returns the same carrier-facing transport without
+// imposing an HTTP client's cookie or redirect behavior on the caller.
+func NewSOCKS5HTTPTransport(addr, username, password string) (http.RoundTripper, error) {
+	return entitlement.NewSOCKS5HTTPTransport(addr, username, password)
 }
 
 // StartEmergencyAddressUpdate is the v1.5.5 positional host API.

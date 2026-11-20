@@ -2,6 +2,7 @@ package e911
 
 import (
 	"errors"
+	"net/http"
 	"strings"
 
 	"github.com/iniwex5/vowifi-go/runtimehost"
@@ -19,9 +20,33 @@ func entitlementClientForProxy(proxy *runtimehost.ProxyConfig) (runtimee911.HTTP
 	return redactingHTTPClient{client: client, proxy: proxy}, nil
 }
 
+func websheetTransportForProxy(proxy *runtimehost.ProxyConfig) (http.RoundTripper, error) {
+	if proxy == nil || !proxy.Enabled {
+		return nil, nil
+	}
+	transport, err := runtimee911.NewSOCKS5HTTPTransport(proxy.Addr, proxy.Username, proxy.Password)
+	if err != nil {
+		return nil, redactProxyError(err, proxy)
+	}
+	return redactingRoundTripper{transport: transport, proxy: proxy}, nil
+}
+
 type redactingHTTPClient struct {
 	client runtimee911.HTTPClient
 	proxy  *runtimehost.ProxyConfig
+}
+
+type redactingRoundTripper struct {
+	transport http.RoundTripper
+	proxy     *runtimehost.ProxyConfig
+}
+
+func (t redactingRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
+	if t.transport == nil {
+		return nil, errors.New("e911 websheet HTTP transport is unavailable")
+	}
+	response, err := t.transport.RoundTrip(req)
+	return response, redactProxyError(err, t.proxy)
 }
 
 func (c redactingHTTPClient) Do(req *runtimee911.HTTPRequest) (*runtimee911.HTTPResponse, error) {

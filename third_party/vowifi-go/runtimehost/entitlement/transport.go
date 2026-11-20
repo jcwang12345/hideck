@@ -31,6 +31,20 @@ func NewDefaultHTTPClient() HTTPClient {
 // SOCKS5 egress. DNS names are handed to the proxy instead of being resolved
 // on the host.
 func NewSOCKS5HTTPClient(addr, username, password string) (HTTPClient, error) {
+	transport, err := NewSOCKS5HTTPTransport(addr, username, password)
+	if err != nil {
+		return nil, err
+	}
+	return NewHTTPClientAdapter(&http.Client{
+		Transport: transport,
+		Timeout:   entitlementHTTPTimeout,
+	}), nil
+}
+
+// NewSOCKS5HTTPTransport exposes the carrier-facing uTLS transport so hosts
+// can keep their own cookie jar and redirect policy while using the same
+// authenticated SOCKS5 egress as the entitlement request.
+func NewSOCKS5HTTPTransport(addr, username, password string) (http.RoundTripper, error) {
 	addr = strings.TrimSpace(addr)
 	if _, _, err := net.SplitHostPort(addr); err != nil {
 		return nil, fmt.Errorf("entitlement invalid SOCKS5 address: %w", err)
@@ -47,19 +61,23 @@ func NewSOCKS5HTTPClient(addr, username, password string) (HTTPClient, error) {
 	if !ok {
 		return nil, errors.New("entitlement SOCKS5 dialer does not support context cancellation")
 	}
-	return newHTTPClientWithDialer(contextDialer.DialContext), nil
+	return newHTTPRoundTripperWithDialer(contextDialer.DialContext), nil
 }
 
 type entitlementDialContext func(context.Context, string, string) (net.Conn, error)
 
 func newHTTPClientWithDialer(dial entitlementDialContext) HTTPClient {
 	return NewHTTPClientAdapter(&http.Client{
-		Transport: &fallbackRoundTripper{
-			primary:  newUTLSHTTP2Transport(dial),
-			fallback: newUTLSHTTP1Transport(dial),
-		},
-		Timeout: entitlementHTTPTimeout,
+		Transport: newHTTPRoundTripperWithDialer(dial),
+		Timeout:   entitlementHTTPTimeout,
 	})
+}
+
+func newHTTPRoundTripperWithDialer(dial entitlementDialContext) http.RoundTripper {
+	return &fallbackRoundTripper{
+		primary:  newUTLSHTTP2Transport(dial),
+		fallback: newUTLSHTTP1Transport(dial),
+	}
 }
 
 func NewHTTPClientAdapter(client *http.Client) HTTPClient {
