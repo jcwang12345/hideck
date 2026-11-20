@@ -53,6 +53,7 @@ func TestResolveVoWiFiCountryProxySelectsUSProxy(t *testing.T) {
 }
 
 func TestResolveVoWiFiEntitlementProxyUsesVoWiFiCountryRoute(t *testing.T) {
+	t.Setenv(e911UpstreamProxyEnv, "")
 	openDeviceTestDB(t)
 	loadDeviceCountryTableFixture(t)
 	if err := db.UpsertUpstreamProxy(db.UpstreamProxy{
@@ -72,6 +73,38 @@ func TestResolveVoWiFiEntitlementProxyUsesVoWiFiCountryRoute(t *testing.T) {
 	}
 	if got == nil || got.ID != "proxy-us-e911" || got.Addr != "127.0.0.1:1089" {
 		t.Fatalf("entitlement proxy=%+v, want proxy-us-e911", got)
+	}
+}
+
+func TestResolveVoWiFiEntitlementProxyUsesDedicatedOverride(t *testing.T) {
+	openDeviceTestDB(t)
+	if err := db.UpsertUpstreamProxy(db.UpstreamProxy{
+		ID: "proxy-e911", Addr: "127.0.0.1:1090", Enabled: true,
+		CreatedAt: time.Now(), UpdatedAt: time.Now(),
+	}); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv(e911UpstreamProxyEnv, "proxy-e911")
+
+	got, err := (&Pool{}).ResolveVoWiFiEntitlementProxy(context.Background(), "dev-1", "", "310")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got == nil || got.ID != "proxy-e911" || got.Addr != "127.0.0.1:1090" {
+		t.Fatalf("entitlement proxy=%+v, want dedicated proxy-e911", got)
+	}
+}
+
+func TestResolveVoWiFiEntitlementProxyDedicatedDirect(t *testing.T) {
+	openDeviceTestDB(t)
+	t.Setenv(e911UpstreamProxyEnv, db.VoWiFiUpstreamProxyDirect)
+
+	got, err := (&Pool{}).ResolveVoWiFiEntitlementProxy(context.Background(), "dev-1", "", "310")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != nil {
+		t.Fatalf("entitlement proxy=%+v, want direct", got)
 	}
 }
 

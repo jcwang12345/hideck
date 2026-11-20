@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"os"
 	"strings"
 	"time"
 
@@ -22,6 +23,8 @@ import (
 	"github.com/yibaiba/hideck/pkg/logger"
 	"github.com/yibaiba/hideck/pkg/mbim"
 )
+
+const e911UpstreamProxyEnv = "HIDECK_E911_UPSTREAM_PROXY_ID"
 
 type voWiFiStartContext struct {
 	worker *Worker
@@ -553,13 +556,35 @@ type voWiFiProxyResolveRequest struct {
 	ICCID    string
 }
 
-// ResolveVoWiFiEntitlementProxy applies the same card override and home-country
-// pool selection used by the active IKE/ePDG path. E911 entitlement therefore
-// leaves through the carrier route selected for VoWiFi instead of the router's
-// unrelated default Internet route.
+// ResolveVoWiFiEntitlementProxy uses an optional entitlement-only proxy before
+// falling back to the card and home-country route used by IKE/ePDG. Some carrier
+// HTTPS entitlement endpoints and ePDG UDP endpoints require different exits.
 func (p *Pool) ResolveVoWiFiEntitlementProxy(ctx context.Context, deviceID, iccid, homeMCC string) (*runtimehost.ProxyConfig, error) {
 	if p == nil {
 		return nil, errors.New("VoWiFi proxy resolver is unavailable")
+	}
+	if proxyID := strings.TrimSpace(os.Getenv(e911UpstreamProxyEnv)); proxyID != "" {
+		if db.NormalizeVoWiFiUpstreamProxyID(proxyID) == db.VoWiFiUpstreamProxyDirect {
+			logger.Info("E911 entitlement 使用专用直连路由",
+				"device", deviceID,
+				"proxy_route", "e911_direct")
+			return nil, nil
+		}
+		proxy, err := db.GetUpstreamProxyByID(proxyID)
+		if err != nil {
+			return nil, fmt.Errorf("读取 E911 专用前置代理 %s 失败: %w", proxyID, err)
+		}
+		if proxy == nil {
+			return nil, fmt.Errorf("E911 专用前置代理 %s 不存在", proxyID)
+		}
+		if !proxy.Enabled {
+			return nil, fmt.Errorf("E911 专用前置代理 %s 已禁用", proxyID)
+		}
+		logger.Info("E911 entitlement 使用专用前置代理",
+			"device", deviceID,
+			"upstream_proxy_id", proxy.ID,
+			"proxy_route", "e911_override")
+		return proxyConfigFromDB(proxy), nil
 	}
 	return resolveVoWiFiCountryProxy(voWiFiProxyResolveRequest{
 		Ctx:      ctx,

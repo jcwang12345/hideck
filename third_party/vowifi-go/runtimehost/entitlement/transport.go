@@ -20,6 +20,8 @@ import (
 
 const entitlementHTTPTimeout = 45 * time.Second
 
+var errHTTP2NotNegotiated = errors.New("entitlement server did not negotiate HTTP/2")
+
 func NewDefaultHTTPClient() HTTPClient {
 	return newHTTPClientWithDialer(nil)
 }
@@ -153,9 +155,32 @@ func newUTLSHTTP1Transport(dial entitlementDialContext) http.RoundTripper {
 func newUTLSHTTP2Transport(dial entitlementDialContext) http.RoundTripper {
 	return &http2.Transport{
 		DialTLSContext: func(ctx context.Context, network, address string, _ *tls.Config) (net.Conn, error) {
-			return dialUTLSWithNextProtosUsing(ctx, network, address, []string{"h2", "http/1.1"}, dial)
+			connection, err := dialUTLSWithNextProtosUsing(ctx, network, address, []string{"h2", "http/1.1"}, dial)
+			if err != nil {
+				return nil, err
+			}
+			if err := requireHTTP2ALPN(connection); err != nil {
+				connection.Close()
+				return nil, err
+			}
+			return connection, nil
 		},
 	}
+}
+
+func requireHTTP2ALPN(connection net.Conn) error {
+	uconn, ok := connection.(*utls.UConn)
+	if !ok {
+		return fmt.Errorf("%w: TLS connection does not expose ALPN state", errHTTP2NotNegotiated)
+	}
+	state := uconn.ConnectionState()
+	if state.NegotiatedProtocol != http2.NextProtoTLS {
+		return fmt.Errorf("%w: negotiated %q", errHTTP2NotNegotiated, state.NegotiatedProtocol)
+	}
+	if !state.NegotiatedProtocolIsMutual {
+		return fmt.Errorf("%w: protocol was not mutually negotiated", errHTTP2NotNegotiated)
+	}
+	return nil
 }
 
 func dialUTLSWithNextProtos(ctx context.Context, network, address string, nextProtos []string) (net.Conn, error) {
@@ -208,13 +233,17 @@ func (f fallbackRoundTripper) RoundTrip(req *http.Request) (*http.Response, erro
 		return f.fallback.RoundTrip(cloneRequestWithBody(req, body, hadBody))
 	}
 	resp, err := f.primary.RoundTrip(cloneRequestWithBody(req, body, hadBody))
-	if err == nil || !isHTTP2SawHTTP1HeaderError(err) {
+	if err == nil || !shouldRetryWithHTTP1(err) {
 		return resp, err
 	}
 	if resp != nil && resp.Body != nil {
 		resp.Body.Close()
 	}
 	return f.fallback.RoundTrip(cloneRequestWithBody(req, body, hadBody))
+}
+
+func shouldRetryWithHTTP1(err error) bool {
+	return errors.Is(err, errHTTP2NotNegotiated) || isHTTP2SawHTTP1HeaderError(err)
 }
 
 func readRequestBody(req *http.Request) ([]byte, bool, error) {

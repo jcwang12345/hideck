@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"compress/gzip"
 	"context"
+	"crypto/tls"
 	"encoding/json"
 	"errors"
 	"io"
@@ -158,6 +159,115 @@ func TestFallbackRoundTripperReplaysBodyOverHTTP1(t *testing.T) {
 	}
 }
 
+func TestFallbackRoundTripperReplaysBodyAfterHTTP1ALPN(t *testing.T) {
+	server := httptest.NewUnstartedServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}))
+	server.TLS = &tls.Config{NextProtos: []string{"http/1.1"}}
+	server.StartTLS()
+	defer server.Close()
+
+	address := strings.TrimPrefix(server.URL, "https://")
+	connection, err := dialUTLS(context.Background(), "tcp", address, &utls.Config{
+		ServerName: "example.test", InsecureSkipVerify: true, NextProtos: []string{"h2", "http/1.1"},
+	})
+	if err != nil {
+		t.Fatalf("dialUTLS: %v", err)
+	}
+	state := connection.(*utls.UConn).ConnectionState()
+	if state.NegotiatedProtocol != "http/1.1" {
+		connection.Close()
+		t.Fatalf("ALPN = %q", state.NegotiatedProtocol)
+	}
+	alpnErr := requireHTTP2ALPN(connection)
+	connection.Close()
+	if !errors.Is(alpnErr, errHTTP2NotNegotiated) {
+		t.Fatalf("requireHTTP2ALPN error = %v", alpnErr)
+	}
+
+	originalBody := &trackedBody{Reader: bytes.NewReader([]byte("payload"))}
+	var primaryBody, fallbackBody string
+	transport := fallbackRoundTripper{
+		primary: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+			primaryBody = readBodyString(t, req.Body)
+			return nil, alpnErr
+		}),
+		fallback: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+			fallbackBody = readBodyString(t, req.Body)
+			return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader("ok"))}, nil
+		}),
+	}
+	req, err := http.NewRequest(http.MethodPost, "https://example.test/", originalBody)
+	if err != nil {
+		t.Fatal(err)
+	}
+	response, err := transport.RoundTrip(req)
+	if err != nil {
+		t.Fatalf("RoundTrip: %v", err)
+	}
+	response.Body.Close()
+	if primaryBody != "payload" || fallbackBody != "payload" {
+		t.Fatalf("bodies primary=%q fallback=%q", primaryBody, fallbackBody)
+	}
+	if !originalBody.closed {
+		t.Fatal("original request body was not closed")
+	}
+}
+
+func TestFallbackRoundTripperKeepsSuccessfulHTTP2Response(t *testing.T) {
+	originalBody := &trackedBody{Reader: bytes.NewReader([]byte("payload"))}
+	fallbackCalled := false
+	transport := fallbackRoundTripper{
+		primary: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+			if body := readBodyString(t, req.Body); body != "payload" {
+				t.Fatalf("primary body = %q", body)
+			}
+			return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader("h2"))}, nil
+		}),
+		fallback: roundTripFunc(func(*http.Request) (*http.Response, error) {
+			fallbackCalled = true
+			return nil, errors.New("unexpected fallback")
+		}),
+	}
+	req, err := http.NewRequest(http.MethodPost, "https://example.test/", originalBody)
+	if err != nil {
+		t.Fatal(err)
+	}
+	response, err := transport.RoundTrip(req)
+	if err != nil {
+		t.Fatalf("RoundTrip: %v", err)
+	}
+	response.Body.Close()
+	if fallbackCalled {
+		t.Fatal("successful HTTP/2 request used HTTP/1.1 fallback")
+	}
+	if !originalBody.closed {
+		t.Fatal("original request body was not closed")
+	}
+}
+
+func TestFallbackRoundTripperDoesNotRetryApplicationError(t *testing.T) {
+	applicationErr := errors.New("carrier rejected entitlement request")
+	fallbackCalled := false
+	transport := fallbackRoundTripper{
+		primary: roundTripFunc(func(*http.Request) (*http.Response, error) {
+			return nil, applicationErr
+		}),
+		fallback: roundTripFunc(func(*http.Request) (*http.Response, error) {
+			fallbackCalled = true
+			return nil, nil
+		}),
+	}
+	req, err := http.NewRequest(http.MethodGet, "https://example.test/", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := transport.RoundTrip(req); !errors.Is(err, applicationErr) {
+		t.Fatalf("RoundTrip error = %v", err)
+	}
+	if fallbackCalled {
+		t.Fatal("application error used HTTP/1.1 fallback")
+	}
+}
+
 func TestUTLSDialPerformsRealHandshakeAndALPN(t *testing.T) {
 	server := httptest.NewUnstartedServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}))
 	server.EnableHTTP2 = true
@@ -175,6 +285,9 @@ func TestUTLSDialPerformsRealHandshakeAndALPN(t *testing.T) {
 	state := connection.(*utls.UConn).ConnectionState()
 	if state.NegotiatedProtocol != "h2" {
 		t.Fatalf("ALPN = %q", state.NegotiatedProtocol)
+	}
+	if err := requireHTTP2ALPN(connection); err != nil {
+		t.Fatalf("requireHTTP2ALPN: %v", err)
 	}
 }
 
