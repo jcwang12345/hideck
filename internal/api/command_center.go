@@ -14,6 +14,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/yibaiba/hideck/internal/commandcenter"
+	"github.com/yibaiba/hideck/internal/identity"
 )
 
 const maxCommandInputBytes = 4096
@@ -23,8 +24,9 @@ type commandExecuteRequest struct {
 }
 
 func (s *Server) registerCommandCenterRoutes(api *gin.RouterGroup) {
-	s.registerApprovedCommandRoutes(api)
-	s.registerCompatibilityCommandRoutes(api)
+	admin := api.Group("", RequireRole(identity.RoleAdmin))
+	s.registerApprovedCommandRoutes(admin)
+	s.registerCompatibilityCommandRoutes(admin)
 }
 
 func (s *Server) registerApprovedCommandRoutes(api *gin.RouterGroup) {

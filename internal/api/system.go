@@ -10,6 +10,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/yibaiba/hideck/internal/config"
+	"github.com/yibaiba/hideck/internal/identity"
 	"github.com/yibaiba/hideck/internal/updater"
 	"github.com/yibaiba/hideck/pkg/logger"
 )
@@ -85,13 +86,19 @@ func (s *Server) handleApplyUpdate(c *gin.Context) {
 // 必须登录后才能调用——这是真正会删数据、删配置、删自身可执行文件并
 // os.Exit(0) 的破坏性操作，绝不能允许未鉴权请求触发。
 func (s *Server) handleUninstall(c *gin.Context) {
-	if !s.isAuthenticatedRequest(c, time.Now()) {
+	token := s.requestSessionToken(c)
+	principal, _, err := s.authenticateSession(c.Request.Context(), token, time.Now())
+	if token == "" || err != nil {
 		c.JSON(http.StatusUnauthorized, gin.H{
 			"status":     "error",
 			"code":       "unauthorized",
 			"message":    "未授权",
 			"request_id": requestID(c),
 		})
+		return
+	}
+	if principal.Role != identity.RoleAdmin {
+		abortAuthorization(c, http.StatusForbidden, "forbidden", "权限不足")
 		return
 	}
 

@@ -1,6 +1,8 @@
 package api
 
 import (
+	"context"
+	"errors"
 	"net/http"
 	"strings"
 	"time"
@@ -8,6 +10,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/yibaiba/hideck/internal/config"
+	"github.com/yibaiba/hideck/internal/identity"
 )
 
 const defaultWebPassword = "admin"
@@ -27,6 +30,8 @@ type authenticatedSession struct {
 	Token      string
 	ExpiresAt  time.Time
 	Credential passwordCredentialStatus
+	User       identity.UserView
+	Session    identity.SessionView
 }
 
 func isBcryptPassword(password string) bool {
@@ -130,7 +135,30 @@ func (s *Server) authSnapshot() config.WebConfig {
 	return s.auth
 }
 
-func (s *Server) createLoginSession(username string, password string) (authenticatedSession, bool, error) {
+func (s *Server) createLoginSession(ctx context.Context, username string, password string) (authenticatedSession, bool, error) {
+	if s.identityInitErr != nil {
+		return authenticatedSession{}, true, s.identityInitErr
+	}
+	if s.identityService != nil {
+		result, err := s.identityService.Login(ctx, username, password)
+		if errors.Is(err, identity.ErrInvalidCredentials) {
+			return authenticatedSession{}, false, nil
+		}
+		if err != nil {
+			return authenticatedSession{}, true, err
+		}
+		credential := passwordCredentialStatus{
+			ChangeRequired: isWeakPassword(password, result.User.Username),
+			Management:     "database",
+		}
+		return authenticatedSession{
+			Token:      result.Token,
+			ExpiresAt:  result.Session.ExpiresAt,
+			Credential: credential,
+			User:       identity.ViewUser(result.User),
+			Session:    identity.ViewSession(result.Session),
+		}, true, nil
+	}
 	s.authChangeMu.Lock()
 	defer s.authChangeMu.Unlock()
 	credentials := s.authSnapshot()
@@ -145,6 +173,11 @@ func (s *Server) createLoginSession(username string, password string) (authentic
 		Token:      token,
 		ExpiresAt:  expiresAt,
 		Credential: s.passwordStatus(password),
+		User: identity.UserView{
+			ID:       "legacy-admin",
+			Username: credentials.Username,
+			Role:     identity.RoleAdmin,
+		},
 	}, true, nil
 }
 
@@ -168,5 +201,9 @@ func (s *Server) passwordStatus(suppliedPassword string) passwordCredentialStatu
 }
 
 func (s *Server) handleGetPasswordStatus(c *gin.Context) {
+	if s.identityService != nil {
+		c.JSON(http.StatusOK, passwordCredentialStatus{Management: "database"})
+		return
+	}
 	c.JSON(http.StatusOK, s.passwordStatus(""))
 }

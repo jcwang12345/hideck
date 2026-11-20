@@ -163,8 +163,6 @@ func buildVoiceRequestWithContent(dialog voiceSIPDialog, callID, method, branch,
 	return request.String()
 }
 
-
-
 func writeVoiceDialogHeaders(out *strings.Builder, dialog voiceSIPDialog, callID, method, branch string) {
 	writeVoiceCoreHeaders(out, dialog, callID, method, branch)
 	writeVoiceOptionalHeader(out, "P-Preferred-Identity", "<"+dialog.localURI+">")

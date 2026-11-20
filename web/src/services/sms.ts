@@ -2,6 +2,7 @@ import { api } from '../stores/auth'
 import { callService } from './http'
 import type { ServiceResult } from '../types/domain'
 import type { DeviceMgmtListItem } from '../types/api'
+import type { NumberPoolResource } from '../types/admin-resources'
 import type { SMSContactDTO, SMSMessageDTO, SmsThreadVM } from '../types/view-model'
 import { normalizeSmsUnreadCount } from '../utils/smsPresentation'
 
@@ -15,13 +16,28 @@ export type SmsThreadQueryParams = {
   before_id?: number
 }
 
-export type SmsSendPayload = {
-  device_id?: string
-  imsi?: string
-  iccid?: string
+type SmsSendBase = {
   phone: string
   message: string
 }
+
+export type SmsPoolSendPayload = SmsSendBase & {
+  pool_id: string
+  number_id?: string
+  device_id?: never
+  imsi?: never
+  iccid?: never
+}
+
+export type SmsDiagnosticSendPayload = SmsSendBase & {
+  device_id: string
+  pool_id?: never
+  number_id?: never
+  imsi?: never
+  iccid?: never
+}
+
+export type SmsSendPayload = SmsPoolSendPayload | SmsDiagnosticSendPayload
 
 export type SmsDeleteThreadPayload = {
   device_id?: string
@@ -101,6 +117,12 @@ export const smsService = {
       return list.filter(d => d.running)
     })
   },
+  listNumberPools() {
+    return reuseInflight('sms:listNumberPools', async () => {
+      const res = await api.get<{ number_pools?: NumberPoolResource[] }>('/number-pools')
+      return Array.isArray(res.data?.number_pools) ? res.data.number_pools : []
+    })
+  },
   listContacts(deviceId?: string) {
     const key = `sms:listContacts:${deviceId && deviceId !== 'all' ? deviceId : 'all'}`
     return reuseInflight(key, async () => {
@@ -121,10 +143,17 @@ export const smsService = {
   },
   send(payload: SmsSendPayload) {
     return callService(async () => {
-      const res = await api.post<{ parts_total?: number; destination: string }>('/sms/send', payload)
+      const res = await api.post<{
+        parts_total?: number
+        destination: string
+        pool_id?: string
+        number_id?: string
+      }>('/sms/send', payload)
       return {
         partsTotal: Number(res.data?.parts_total || 0),
-        destination: res.data.destination
+        destination: res.data.destination,
+        poolId: res.data.pool_id,
+        numberId: res.data.number_id
       }
     })
   },

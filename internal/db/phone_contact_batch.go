@@ -9,6 +9,7 @@ import (
 )
 
 type phoneContactBatchOptions struct {
+	OwnerID     string
 	Region      string
 	SkipInvalid bool
 }
@@ -32,7 +33,7 @@ func upsertPhoneContactBatch(
 			if err := assignImportContactID(&input, groupIDs); err != nil {
 				return err
 			}
-			row, err := upsertPhoneContactWithDB(ctx, tx, input)
+			row, err := upsertPhoneContactWithDB(ctx, tx, options.OwnerID, input)
 			if err == nil {
 				rows = append(rows, row)
 				continue

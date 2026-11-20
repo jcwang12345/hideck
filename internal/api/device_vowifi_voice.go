@@ -8,6 +8,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/iniwex5/vowifi-go/runtimehost/voicehost"
+	"github.com/yibaiba/hideck/internal/notify"
 	"github.com/yibaiba/hideck/pkg/logger"
 )
 
@@ -23,6 +24,14 @@ func (s *Server) handleDeviceVoWiFiCall(c *gin.Context) {
 }
 
 func (s *Server) useDeviceVoWiFiCall(c businessContext) {
+	scope, rest, ok := s.phoneAccess(c)
+	if !ok {
+		return
+	}
+	if rest && !scope.Administrator {
+		abortAuthorization(c.(*gin.Context), http.StatusForbidden, "phone_legacy_dial_forbidden", "普通用户请通过号码调度接口发起通话")
+		return
+	}
 	releaseOperation, allowed := s.acquireBusinessMutation(c)
 	if !allowed {
 		return
@@ -50,7 +59,14 @@ func (s *Server) useDeviceVoWiFiCall(c businessContext) {
 	ctx, cancel := context.WithTimeout(businessRequestContext(c), time.Duration(holdSeconds)*time.Second+voWiFiCallSetupGrace)
 	defer cancel()
 	logger.Info("VoWiFi 外呼请求开始", "device", deviceID, "callee_suffix", maskedCallee(req.Callee), "hold_seconds", holdSeconds, "trace_id", traceID)
-	result, err := s.simulateCall(ctx, deviceID, voicehost.SimulateCallRequest{
+	iccid := ""
+	if s.pool != nil {
+		if worker := s.pool.GetWorker(deviceID); worker != nil {
+			iccid = worker.CurrentICCID()
+		}
+	}
+	managed, err := s.RunManagedSimulatedCall(ctx, notify.ManagedCallRequest{
+		ActorID: scope.UserID, DeviceID: deviceID, ICCID: iccid,
 		Callee: req.Callee, HoldSeconds: holdSeconds,
 		OnConnected: func() { logger.Info("VoWiFi 外呼已接通并启动 RTP", "device", deviceID, "trace_id", traceID) },
 	})
@@ -59,7 +75,12 @@ func (s *Server) useDeviceVoWiFiCall(c businessContext) {
 			return
 		}
 		logger.Error("VoWiFi 外呼失败", "device", deviceID, "err", err, "trace_id", traceID)
-		c.JSON(http.StatusBadGateway, gin.H{"status": "error", "code": "vowifi_call_failed", "message": err.Error(), "trace_id": traceID})
+		respondManagedOutboundError(c, err)
+		return
+	}
+	result := managed.Voice
+	if result == nil {
+		c.JSON(http.StatusBadGateway, gin.H{"status": "error", "code": "vowifi_call_failed", "message": "未返回通话结果", "trace_id": traceID})
 		return
 	}
 	logger.Info(
@@ -71,6 +92,7 @@ func (s *Server) useDeviceVoWiFiCall(c businessContext) {
 	)
 	c.JSON(http.StatusOK, gin.H{
 		"status": "ok", "success": result.Success, "message": result.Message,
+		"call_id": managed.CallID, "request_id": managed.RequestID, "lease_id": managed.LeaseID,
 		"duration_ms": result.DurationMs, "trace_id": traceID,
 		"pcap_path": result.PCAPPath, "audio_path": result.AudioPath,
 		"audio_codec":        result.AudioCodec,

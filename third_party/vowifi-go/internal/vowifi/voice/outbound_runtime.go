@@ -73,6 +73,7 @@ func (a *Agent) handleIMSErrorResponse(
 	kind, status, reason, cancelReason := classifyOutboundInviteOutcome(
 		response.StatusCode, response.Reason, call.OutboundCancelReason(), false,
 	)
+	call.setTerminalOutcome(kind, status, reason, "remote")
 	cause := errors.New(formatSimulateCallReason(kind, status, reason, cancelReason))
 	return a.failOutboundCall(call, errors.Join(cause, completeErr))
 }

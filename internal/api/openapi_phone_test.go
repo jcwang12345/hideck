@@ -41,6 +41,7 @@ func phoneOpenAPIPaths() []string {
 		"/phone/calls/{call_id}/dtmf", "/phone/calls/{call_id}/hold", "/phone/calls/{call_id}/resume",
 		"/phone/calls/{call_id}", "/phone/calls/{call_id}/media",
 		"/phone/events", "/phone/history", "/phone/history/delete", "/phone/recordings/{recording}",
+		"/phone/call-requests",
 	}
 }
 

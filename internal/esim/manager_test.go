@@ -1737,6 +1737,38 @@ func TestActiveProfileNameDoesNotTriggerLoadWhenCacheMissing(t *testing.T) {
 	}
 }
 
+func TestCachedCardTypeEvidenceRequiresCompletedNegativeScan(t *testing.T) {
+	mgr := newTestManagerWithOverviewLoader(func() (*EsimOverview, error) {
+		return nil, ErrNoEUICC
+	})
+
+	if euicc, physical := mgr.CachedCardTypeEvidence(); euicc || physical {
+		t.Fatalf("evidence before scan = euicc:%v physical:%v, want unknown", euicc, physical)
+	}
+	if _, err := mgr.GetEsimOverview(); err != nil {
+		t.Fatalf("GetEsimOverview() error = %v", err)
+	}
+	if euicc, physical := mgr.CachedCardTypeEvidence(); euicc || !physical {
+		t.Fatalf("evidence after negative scan = euicc:%v physical:%v, want physical confirmed", euicc, physical)
+	}
+
+	mgr.invalidateOverviewCache("test")
+	if euicc, physical := mgr.CachedCardTypeEvidence(); euicc || physical {
+		t.Fatalf("evidence after invalidation = euicc:%v physical:%v, want unknown", euicc, physical)
+	}
+}
+
+func TestCachedCardTypeEvidenceRecognizesEUICCWithoutProfiles(t *testing.T) {
+	mgr := &Manager{}
+	mgr.setOverviewCache(&EsimOverview{ChipInfo: &EUICCChipInfo{
+		EIDs: []EUICCInfo{{EID: "89049032000000000000000000000001"}},
+	}}, nil, 0)
+
+	if euicc, physical := mgr.CachedCardTypeEvidence(); !euicc || physical {
+		t.Fatalf("evidence = euicc:%v physical:%v, want eUICC", euicc, physical)
+	}
+}
+
 func TestCachedProfileNameForICCIDMatchesCanonicalValue(t *testing.T) {
 	mgr := &Manager{}
 	mgr.setOverviewCache(&EsimOverview{Profiles: []EUICCProfiles{{Profiles: []ProfileItem{

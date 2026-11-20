@@ -1,4 +1,4 @@
-export type PasswordManagement = 'config_file' | 'environment'
+export type PasswordManagement = 'config_file' | 'environment' | 'database'
 
 export type PasswordCredentialStatus = {
   change_required: boolean

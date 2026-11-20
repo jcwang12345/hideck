@@ -12,6 +12,7 @@ import (
 	"github.com/yibaiba/hideck/internal/automation"
 	"github.com/yibaiba/hideck/internal/config"
 	"github.com/yibaiba/hideck/internal/db"
+	"github.com/yibaiba/hideck/internal/identity"
 	"github.com/yibaiba/hideck/pkg/logger"
 )
 
@@ -58,13 +59,14 @@ func (s *Server) notifyAutomaticTaskRun(_ context.Context, task automation.Task,
 }
 
 func (s *Server) registerAutomaticTaskRoutes(api *gin.RouterGroup) {
-	api.GET("/automatic-tasks", s.handleListAutomaticTasks)
-	api.POST("/automatic-tasks", s.handleCreateAutomaticTask)
-	api.GET("/automatic-tasks/:task_id", s.handleGetAutomaticTask)
-	api.PUT("/automatic-tasks/:task_id", s.handleUpdateAutomaticTask)
-	api.DELETE("/automatic-tasks/:task_id", s.handleDeleteAutomaticTask)
-	api.POST("/automatic-tasks/:task_id/actions/run", s.handleRunAutomaticTask)
-	api.GET("/automatic-task-runs", s.handleListAutomaticTaskRuns)
+	admin := api.Group("", RequireRole(identity.RoleAdmin))
+	admin.GET("/automatic-tasks", s.handleListAutomaticTasks)
+	admin.POST("/automatic-tasks", s.handleCreateAutomaticTask)
+	admin.GET("/automatic-tasks/:task_id", s.handleGetAutomaticTask)
+	admin.PUT("/automatic-tasks/:task_id", s.handleUpdateAutomaticTask)
+	admin.DELETE("/automatic-tasks/:task_id", s.handleDeleteAutomaticTask)
+	admin.POST("/automatic-tasks/:task_id/actions/run", s.handleRunAutomaticTask)
+	admin.GET("/automatic-task-runs", s.handleListAutomaticTaskRuns)
 }
 
 func (s *Server) handleListAutomaticTasks(c *gin.Context) {

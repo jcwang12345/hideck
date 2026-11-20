@@ -7,6 +7,8 @@ defineProps<{
   parts: number
   length: number
   sending: boolean
+  disabled?: boolean
+  disabledReason?: string
 }>()
 
 const emit = defineEmits<{
@@ -28,15 +30,16 @@ function updateMessage(value: unknown) {
       resize="none"
       placeholder="输入回复"
       aria-label="短信回复内容"
+      :disabled="disabled"
       @update:model-value="updateMessage"
       @keydown.enter.exact.prevent="emit('send')"
     />
-    <button type="button" class="sms-send" :disabled="sending || !modelValue.trim()" @click="emit('send')">
+    <button type="button" class="sms-send" :disabled="disabled || sending || !modelValue.trim()" @click="emit('send')">
       <el-icon><Send24Regular /></el-icon>
       <span>{{ sending ? '发送中' : '发送' }}</span>
     </button>
     <div class="sms-composer-meta">
-      <span>{{ encoding }} · 预计 {{ parts }} 段 · {{ length }} 字</span>
+      <span :class="{ 'is-warning': disabledReason }">{{ disabledReason || `${encoding} · 预计 ${parts} 段 · ${length} 字` }}</span>
       <span>Enter 发送 · Shift+Enter 换行</span>
     </div>
   </footer>
@@ -71,6 +74,7 @@ function updateMessage(value: unknown) {
 
 .sms-send:disabled { cursor: not-allowed; opacity: .5; }
 .sms-composer-meta { grid-column: 1 / -1; display: flex; justify-content: space-between; gap: 12px; color: var(--ui-text-muted); font-size: var(--ui-font-caption); }
+.sms-composer-meta .is-warning { color: var(--ui-warning); font-weight: 650; }
 
 @media (max-width: 520px) {
   .sms-composer {

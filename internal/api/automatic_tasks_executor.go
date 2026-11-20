@@ -7,11 +7,13 @@ import (
 	"strings"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/iniwex5/vowifi-go/runtimehost"
 	"github.com/iniwex5/vowifi-go/runtimehost/voicehost"
 	"github.com/yibaiba/hideck/internal/automation"
 	"github.com/yibaiba/hideck/internal/db"
 	"github.com/yibaiba/hideck/internal/device"
+	"github.com/yibaiba/hideck/internal/dispatch"
 	"github.com/yibaiba/hideck/pkg/smscodec"
 )
 
@@ -38,6 +40,19 @@ func (e *automaticTaskExecutor) Execute(
 	if worker == nil {
 		return "", fmt.Errorf("device %s is offline", task.DeviceID)
 	}
+	var outbound *managedOutboundLease
+	var err error
+	if task.TaskType == automation.TaskTypeCall {
+		outbound, err = e.server.reserveDirectOutbound(ctx, fmt.Sprintf("automatic-task:%d", task.ID), task.DeviceID, task.ProfileICCID, "", task.Payload.Phone)
+		if err != nil {
+			return "", automation.Permanent(fmt.Errorf("reserve call resource: %w", err))
+		}
+		defer func() {
+			if outbound != nil && !outbound.finished {
+				e.server.releaseManagedOutbound(context.Background(), outbound, "automatic_task_failed", executeErr)
+			}
+		}()
+	}
 	owner := captureAutomaticTaskDeviceOwner(e.server.pool, worker)
 	profileAction, err := resolveAutomaticTaskProfile(task, worker.CurrentICCID())
 	if err != nil {
@@ -48,8 +63,18 @@ func (e *automaticTaskExecutor) Execute(
 			return "", err
 		}
 	} else {
+		if outbound != nil {
+			if err := e.server.transitionManagedOutbound(ctx, outbound, dispatch.LeaseSwitching); err != nil {
+				return "", automation.Permanent(fmt.Errorf("lock profile switch: %w", err))
+			}
+		}
 		if err := e.switchTaskESIM(ctx, task, progress); err != nil {
 			return "", err
+		}
+		if outbound != nil {
+			if err := e.server.transitionManagedOutbound(ctx, outbound, dispatch.LeaseIdentityRefresh); err != nil {
+				return "", automation.Permanent(fmt.Errorf("record profile switch: %w", err))
+			}
 		}
 		worker = e.server.pool.GetWorker(task.DeviceID)
 		if worker == nil {
@@ -78,6 +103,14 @@ func (e *automaticTaskExecutor) Execute(
 	if err := e.prepareEnvironment(ctx, task, snapshot, progress); err != nil {
 		return "", err
 	}
+	if outbound != nil {
+		if err := e.server.transitionManagedOutbound(ctx, outbound, dispatch.LeaseRegistering); err != nil {
+			return "", automation.Permanent(fmt.Errorf("record call preparation: %w", err))
+		}
+		if err := e.server.transitionManagedOutbound(ctx, outbound, dispatch.LeaseReady); err != nil {
+			return "", automation.Permanent(fmt.Errorf("mark call resource ready: %w", err))
+		}
+	}
 
 	worker, err = owner.resolve(e.server.pool, task.DeviceID, task.ProfileICCID)
 	if err != nil {
@@ -88,7 +121,7 @@ func (e *automaticTaskExecutor) Execute(
 	case automation.TaskTypeSMS:
 		return e.executeSMS(ctx, worker, task, progress)
 	case automation.TaskTypeCall:
-		return e.executeCall(ctx, worker, task, progress)
+		return e.executeCall(ctx, worker, task, progress, outbound)
 	case automation.TaskTypePublicIP:
 		return executePublicIP(worker, progress)
 	default:
@@ -267,9 +300,20 @@ func (e *automaticTaskExecutor) executeCall(
 	worker *device.Worker,
 	task automation.Task,
 	progress func(string) error,
+	outbound *managedOutboundLease,
 ) (string, error) {
 	if err := reportAutomationProgress(progress, "正在发起通话"); err != nil {
 		return "", err
+	}
+	if outbound == nil {
+		return "", automation.Permanent(errors.New("call resource lease is unavailable"))
+	}
+	callID := fmt.Sprintf("automatic-%d-%s", task.ID, uuid.NewString())
+	if err := e.server.bindManagedOutbound(ctx, outbound, callID); err != nil {
+		return "", automation.Permanent(fmt.Errorf("bind automatic call: %w", err))
+	}
+	finish := func(kind dispatch.OutcomeKind, reason string) error {
+		return e.server.completeManagedOutbound(context.Background(), outbound, callID, kind, reason)
 	}
 	if task.Environment == automation.EnvironmentVoWiFi {
 		if e.server.voiceGW == nil {
@@ -279,10 +323,19 @@ func (e *automaticTaskExecutor) executeCall(
 			Callee: task.Payload.Phone, HoldSeconds: task.Payload.HoldSeconds,
 		})
 		if err != nil {
+			_ = finish(dispatch.OutcomeNetworkFailed, err.Error())
 			return "", automation.Permanent(fmt.Errorf("place VoWiFi call: %w", err))
 		}
 		if result == nil || !result.Success {
+			reason := "VoWiFi call did not complete successfully"
+			if result != nil && strings.TrimSpace(result.Reason) != "" {
+				reason = result.Reason
+			}
+			_ = finish(dispatch.OutcomeUnknownFailed, reason)
 			return "", automation.Permanent(errors.New("VoWiFi call did not complete successfully"))
+		}
+		if err := finish(dispatch.OutcomeCompleted, ""); err != nil {
+			return "", automation.Permanent(fmt.Errorf("record VoWiFi call outcome: %w", err))
 		}
 		return fmt.Sprintf(
 			"VoWiFi 通话已完成，duration_ms=%d，audio_path=%s",
@@ -290,9 +343,11 @@ func (e *automaticTaskExecutor) executeCall(
 		), nil
 	}
 	if worker.Modem == nil {
+		_ = finish(dispatch.OutcomeNetworkFailed, "cellular calling requires an AT modem channel")
 		return "", errors.New("cellular calling requires an AT modem channel")
 	}
 	if err := e.server.pool.DialAuthorizedCellularCall(ctx, worker, task.Payload.Phone); err != nil {
+		_ = finish(dispatch.OutcomeNetworkFailed, err.Error())
 		return "", automation.Permanent(err)
 	}
 	timer := time.NewTimer(time.Duration(task.Payload.HoldSeconds) * time.Second)
@@ -300,11 +355,16 @@ func (e *automaticTaskExecutor) executeCall(
 	select {
 	case <-ctx.Done():
 		_ = worker.Modem.HangupCall()
+		_ = finish(dispatch.OutcomeLocalCanceled, ctx.Err().Error())
 		return "", automation.Permanent(ctx.Err())
 	case <-timer.C:
 	}
 	if err := worker.Modem.HangupCall(); err != nil {
+		_ = finish(dispatch.OutcomeNetworkFailed, err.Error())
 		return "", automation.Permanent(err)
+	}
+	if err := finish(dispatch.OutcomeCompleted, ""); err != nil {
+		return "", automation.Permanent(fmt.Errorf("record cellular call outcome: %w", err))
 	}
 	return "蜂窝通话已拨号并按计划挂机", nil
 }

@@ -669,6 +669,10 @@ func (m *Manager) handleCmdCall(cmdCtx CommandContext, args []string) string {
 	if voiceGW == nil || voiceGW.GetAgentCurrent(deviceID) == nil {
 		return fmt.Sprintf("发起 VoWiFi 呼叫 / 失败\n设备    %s\n原因    VoWiFi 未就绪", deviceID)
 	}
+	coordinator := m.outboundCalls.get()
+	if coordinator == nil {
+		return fmt.Sprintf("发起 VoWiFi 呼叫 / 失败\n设备    %s\n原因    资源调度服务未配置", deviceID)
+	}
 
 	displayName := m.deviceLabel(worker.ID)
 	caller := "未知"
@@ -681,7 +685,10 @@ func (m *Manager) handleCmdCall(cmdCtx CommandContext, args []string) string {
 		ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 		defer cancel()
 
-		req := voicehost.SimulateCallRequest{
+		req := ManagedCallRequest{
+			ActorID:     commandActorID(cmdCtx),
+			DeviceID:    deviceID,
+			ICCID:       worker.CurrentICCID(),
 			Callee:      callee,
 			HoldSeconds: holdSeconds,
 			OnConnected: func() {
@@ -692,9 +699,14 @@ func (m *Manager) handleCmdCall(cmdCtx CommandContext, args []string) string {
 			},
 		}
 
-		res, err := m.pool.SimulateCallWithCellularData(ctx, deviceID, req)
+		managed, err := coordinator.RunManagedSimulatedCall(ctx, req)
 		if err != nil {
 			cmdCtx.Reply(fmt.Sprintf("发起 VoWiFi 呼叫 / 失败\n设备    %s\n主叫    %s\n被叫    %s\n原因    %v", displayName, caller, callee, err))
+			return
+		}
+		res := managed.Voice
+		if res == nil {
+			cmdCtx.Reply(fmt.Sprintf("发起 VoWiFi 呼叫 / 失败\n设备    %s\n主叫    %s\n被叫    %s\n原因    未返回通话结果", displayName, caller, callee))
 			return
 		}
 
@@ -812,6 +824,10 @@ func (m *Manager) handleCmdCellCall(cmdCtx CommandContext, args []string) string
 	if voiceGW == nil || voiceGW.GetAgentCurrent(deviceID) == nil {
 		return commandFailureBlock("发起蜂窝通话", deviceID, "蜂窝模式未就绪，请先启用蜂窝模式")
 	}
+	coordinator := m.outboundCalls.get()
+	if coordinator == nil {
+		return commandFailureBlock("发起蜂窝通话", deviceID, "资源调度服务未配置")
+	}
 
 	displayName := m.deviceLabel(worker.ID)
 	caller := "未知"
@@ -850,7 +866,10 @@ func (m *Manager) handleCmdCellCall(cmdCtx CommandContext, args []string) string
 		ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 		defer cancel()
 
-		req := voicehost.SimulateCallRequest{
+		req := ManagedCallRequest{
+			ActorID:     commandActorID(cmdCtx),
+			DeviceID:    deviceID,
+			ICCID:       worker.CurrentICCID(),
 			Callee:      callee,
 			HoldSeconds: holdSeconds,
 			OnConnected: func() {
@@ -858,9 +877,14 @@ func (m *Manager) handleCmdCellCall(cmdCtx CommandContext, args []string) string
 			},
 		}
 
-		res, err := m.pool.SimulateCallWithCellularData(ctx, deviceID, req)
+		managed, err := coordinator.RunManagedSimulatedCall(ctx, req)
 		if err != nil {
 			cmdCtx.Reply(fmt.Sprintf("发起蜂窝通话 / 失败\n设备    %s\n主叫    %s\n被叫    %s\n原因    %v", displayName, caller, callee, err))
+			return
+		}
+		res := managed.Voice
+		if res == nil {
+			cmdCtx.Reply(fmt.Sprintf("发起蜂窝通话 / 失败\n设备    %s\n主叫    %s\n被叫    %s\n原因    未返回通话结果", displayName, caller, callee))
 			return
 		}
 

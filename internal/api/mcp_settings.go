@@ -7,6 +7,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/yibaiba/hideck/internal/config"
+	"github.com/yibaiba/hideck/internal/identity"
 	"github.com/yibaiba/hideck/internal/mcpserver"
 )
 
@@ -16,16 +17,17 @@ func (s *Server) mcpEnabled() bool {
 	return s.fullCfg != nil && s.fullCfg.MCP.Enabled
 }
 func (s *Server) registerMCPManagement(api *gin.RouterGroup) {
-	api.GET("/settings/mcp", s.handleMCPSettingsGet)
-	api.PUT("/settings/mcp", s.handleMCPSettingsPut)
-	api.GET("/mcp/diagnostics", s.handleMCPDiagnostics)
-	api.GET("/mcp/tokens", s.handleMCPTokensList)
-	api.POST("/mcp/tokens", s.handleMCPTokensCreate)
-	api.DELETE("/mcp/tokens/:id", s.handleMCPTokensRevoke)
-	api.DELETE("/mcp/tokens/:id/record", s.handleMCPTokensDelete)
-	api.POST("/mcp/phone-connections", s.handleMCPConnectionBind)
-	api.PUT("/mcp/phone-connections/:id", s.handleMCPConnectionBind)
-	api.DELETE("/mcp/phone-connections/:id", s.handleMCPConnectionDelete)
+	admin := api.Group("", RequireRole(identity.RoleAdmin))
+	admin.GET("/settings/mcp", s.handleMCPSettingsGet)
+	admin.PUT("/settings/mcp", s.handleMCPSettingsPut)
+	admin.GET("/mcp/diagnostics", s.handleMCPDiagnostics)
+	admin.GET("/mcp/tokens", s.handleMCPTokensList)
+	admin.POST("/mcp/tokens", s.handleMCPTokensCreate)
+	admin.DELETE("/mcp/tokens/:id", s.handleMCPTokensRevoke)
+	admin.DELETE("/mcp/tokens/:id/record", s.handleMCPTokensDelete)
+	admin.POST("/mcp/phone-connections", s.handleMCPConnectionBind)
+	admin.PUT("/mcp/phone-connections/:id", s.handleMCPConnectionBind)
+	admin.DELETE("/mcp/phone-connections/:id", s.handleMCPConnectionDelete)
 }
 func (s *Server) handleMCPSettingsGet(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"enabled": s.mcpEnabled(), "path": "/mcp"})

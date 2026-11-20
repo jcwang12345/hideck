@@ -56,6 +56,7 @@ func TestSMSContactsUsesDatabaseBindingWhenWorkerIsOffline(t *testing.T) {
 	server := &Server{pool: pool}
 	gin.SetMode(gin.TestMode)
 	router := gin.New()
+	router.Use(smsAdminTestMiddleware())
 	router.GET("/sms/contacts", server.handleGetSMSContacts)
 	query := url.Values{"device_id": {"offline-1"}}
 	recorder := httptest.NewRecorder()
@@ -150,6 +151,7 @@ func TestDeleteSMSThreadByICCIDDoesNotDeleteSharedIMSIThread(t *testing.T) {
 
 	server := &Server{}
 	router := gin.New()
+	router.Use(smsAdminTestMiddleware())
 	router.DELETE("/sms/thread", server.handleDeleteSMSThread)
 	query := url.Values{"iccid": {iccidA}, "peer": {peer}}
 	recorder := httptest.NewRecorder()

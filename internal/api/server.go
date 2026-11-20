@@ -27,13 +27,16 @@ import (
 	"github.com/yibaiba/hideck/internal/data/repo"
 	"github.com/yibaiba/hideck/internal/db"
 	"github.com/yibaiba/hideck/internal/device"
+	"github.com/yibaiba/hideck/internal/dispatch"
 	"github.com/yibaiba/hideck/internal/global"
+	"github.com/yibaiba/hideck/internal/identity"
 	"github.com/yibaiba/hideck/internal/localtls"
 	"github.com/yibaiba/hideck/internal/mcpserver"
 	"github.com/yibaiba/hideck/internal/notify"
 	"github.com/yibaiba/hideck/internal/phone"
 	"github.com/yibaiba/hideck/internal/proxy/server"
 	proxytraffic "github.com/yibaiba/hideck/internal/proxy/traffic"
+	"github.com/yibaiba/hideck/internal/resourcecatalog"
 	"github.com/yibaiba/hideck/internal/updater"
 	"github.com/yibaiba/hideck/internal/webdavarchive"
 	vwebsheet "github.com/yibaiba/hideck/internal/websheet"
@@ -101,9 +104,14 @@ type Server struct {
 	pool                    *device.Pool        // 设备工作器池
 	utClient                utClientFunc
 	auth                    config.WebConfig // Web 认证配置
-	fs                      http.FileSystem  // 静态文件系统
-	configPath              string           // 配置文件路径
-	proxyMgr                *server.Manager  // 代理实例管理器
+	identityService         *identity.Service
+	identityInitErr         error
+	resourceCatalog         *resourcecatalog.Service
+	dispatcher              *dispatch.Service
+	resourceInitErr         error
+	fs                      http.FileSystem // 静态文件系统
+	configPath              string          // 配置文件路径
+	proxyMgr                *server.Manager // 代理实例管理器
 	trafficRT               realtimeTrafficSubscriber
 	proxyRepo               repo.ProxyInstanceRepository
 	proxySyncMu             sync.Mutex
@@ -118,6 +126,9 @@ type Server struct {
 	voiceGW                 *voicehost.Gateway
 	voiceRecordingDirectory string
 	phone                   *phone.Service
+	callRegistrationReady   func(context.Context, string) error
+	dispatchProfileSwitch   func(context.Context, string, string, string) error
+	dispatchProfileRestore  func(string, string) error
 	phoneCACertificate      string
 	notifyMgr               *notify.Manager
 	weixinQR                *notify.WeixinQRService
@@ -207,6 +218,8 @@ func New(cfg *config.Config, pool *device.Pool, fs http.FileSystem, proxyMgr *se
 		loginAttempts: make(map[string]loginAttempt),
 		shutdownCh:    make(chan struct{}),
 	}
+	s.initializeIdentity()
+	s.initializeResources()
 	s.initializeMCP()
 	s.backendSwitch = newDeviceBackendSwitchService(pool, configPath)
 	s.initializeCommandCenter()
@@ -216,6 +229,23 @@ func New(cfg *config.Config, pool *device.Pool, fs http.FileSystem, proxyMgr *se
 	}
 
 	return s
+}
+
+func (s *Server) initializeResources() {
+	if db.DB == nil {
+		s.resourceInitErr = errors.New("resource database is unavailable")
+		return
+	}
+	s.resourceCatalog = resourcecatalog.NewService(db.DB)
+	dispatcher, err := dispatch.New(db.DB, time.Now)
+	if err != nil {
+		s.resourceInitErr = err
+		return
+	}
+	s.dispatcher = dispatcher
+	if s.notifyMgr != nil {
+		s.notifyMgr.SetOutboundCallCoordinator(s)
+	}
 }
 
 func (s *Server) initializeCommandCenter() {
@@ -259,6 +289,11 @@ func (s *Server) SetArchiveManager(manager archiveManager) {
 
 func (s *Server) SetPhoneService(service *phone.Service) {
 	s.phone = service
+	if service == nil {
+		return
+	}
+	service.SetTerminalObserver(s.handleDispatchTerminalCall)
+	go s.reconcileDispatchLeases()
 }
 
 // checkPassword 验证密码，支持 bcrypt 哈希和明文（向后兼容）
@@ -376,7 +411,7 @@ func (s *Server) newRouter() *gin.Engine {
 	})
 
 	if s.cfg.Debug {
-		r.GET("/debug/embed", s.authMiddleware(), func(c *gin.Context) {
+		r.GET("/debug/embed", s.authMiddleware(), RequireRole(identity.RoleAdmin), func(c *gin.Context) {
 			if s.fs == nil {
 				c.JSON(http.StatusServiceUnavailable, gin.H{
 					"status":  "error",
@@ -417,6 +452,7 @@ func (s *Server) newRouter() *gin.Engine {
 	api.GET("/docs", s.handleAPIDocs)
 	api.GET("/docs/assets/*filepath", s.handleDocsAsset)
 	api.POST("/auth/login", s.handleLogin)
+	api.POST("/login", s.handleLogin) // legacy client compatibility
 	api.GET("/phone/ca.crt", s.handlePhoneCACertificate)
 	api.POST("/rotateip", s.handleRotate)
 	api.OPTIONS("/logs/stream", s.handleLogStreamOptions)
@@ -424,10 +460,15 @@ func (s *Server) newRouter() *gin.Engine {
 
 	// 以下接口需要鉴权
 	api.Use(s.authMiddleware())
+	api.Use(s.memberRouteGuardMiddleware())
+	s.registerIdentityRoutes(api)
+	s.registerIdentityAdminRoutes(api.Group("/admin", RequireRole(identity.RoleAdmin)))
+	s.registerResourceRoutes(api)
+	s.registerDispatchRoutes(api)
 	api.Use(s.mbnMutationMiddleware())
 	s.registerMCPManagement(api)
 	{
-		api.POST("/system/uninstall", s.handleUninstall) // 必须登录后才能调用，见 handleUninstall 内的鉴权检查
+		api.POST("/system/uninstall", RequireRole(identity.RoleAdmin), s.handleUninstall)
 		api.GET("/openapi.yaml", s.handleOpenAPIYAML)
 		api.GET("/openapi.json", s.handleOpenAPIJSON)
 
@@ -1128,15 +1169,23 @@ func (s *Server) handleLogin(c *gin.Context) {
 		return
 	}
 
-	session, authenticated, err := s.createLoginSession(req.Username, req.Password)
+	session, authenticated, err := s.createLoginSession(c.Request.Context(), req.Username, req.Password)
 	if authenticated {
 		release()
 		if err != nil {
 			logger.Error("生成登录 token 失败", "err", err)
-			c.JSON(http.StatusInternalServerError, gin.H{
+			status := http.StatusInternalServerError
+			code := "internal_error"
+			message := "登录失败"
+			if s.identityInitErr != nil {
+				status = http.StatusServiceUnavailable
+				code = "identity_unavailable"
+				message = "身份服务不可用"
+			}
+			c.JSON(status, gin.H{
 				"status":     "error",
-				"code":       "internal_error",
-				"message":    "登录失败",
+				"code":       code,
+				"message":    message,
 				"request_id": requestID(c),
 			})
 			return
@@ -1148,6 +1197,7 @@ func (s *Server) handleLogin(c *gin.Context) {
 			"token":      session.Token,
 			"expires_at": session.ExpiresAt.Format(time.RFC3339),
 			"credential": session.Credential,
+			"user":       session.User,
 		})
 	} else {
 		logger.Warn("登录失败", "ip", clientIP, "username", req.Username)
@@ -1169,6 +1219,53 @@ func (s *Server) handleChangePassword(c *gin.Context) {
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"status": "error", "message": "参数错误"})
+		return
+	}
+	if s.identityInitErr != nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{
+			"status": "error", "code": "identity_unavailable", "message": "身份服务不可用", "request_id": requestID(c),
+		})
+		return
+	}
+	if s.identityService != nil {
+		principal, ok := CurrentPrincipal(c)
+		if !ok {
+			abortAuthorization(c, http.StatusUnauthorized, "unauthorized", "未授权")
+			return
+		}
+		if req.NewPassword != req.ConfirmPassword {
+			c.JSON(http.StatusBadRequest, gin.H{"status": "error", "code": "password_mismatch", "message": "两次输入的新密码不一致"})
+			return
+		}
+		if strings.TrimSpace(req.NewPassword) == "" {
+			c.JSON(http.StatusBadRequest, gin.H{"status": "error", "code": "empty_password", "message": "新密码不能为空"})
+			return
+		}
+		if isWeakPassword(req.NewPassword, principal.Username) {
+			writeWeakPassword(c)
+			return
+		}
+		result, err := s.identityService.ChangePassword(c.Request.Context(), principal, req.OldPassword, req.NewPassword)
+		if errors.Is(err, identity.ErrInvalidCredentials) {
+			c.JSON(http.StatusUnauthorized, gin.H{"status": "error", "code": "invalid_password", "message": "当前密码错误"})
+			return
+		}
+		if err != nil {
+			writeIdentityError(c, err)
+			return
+		}
+		s.authMu.Lock()
+		s.passwordChangeRequired = false
+		s.authMu.Unlock()
+		logger.Info("用户密码已更新", "username", principal.Username, "user_id", principal.UserID, "ip", c.ClientIP())
+		c.JSON(http.StatusOK, gin.H{
+			"status":     "ok",
+			"message":    "密码已更新",
+			"token":      result.Token,
+			"expires_at": result.Session.ExpiresAt.Format(time.RFC3339),
+			"credential": passwordCredentialStatus{Management: "database"},
+			"user":       identity.ViewUser(result.User),
+		})
 		return
 	}
 
@@ -1264,12 +1361,19 @@ func (s *Server) handleChangePassword(c *gin.Context) {
 }
 
 func (s *Server) authorizeRotate(c *gin.Context, username string, password string, now time.Time) bool {
-	token := strings.TrimSpace(c.GetHeader("Authorization"))
+	token := s.requestSessionToken(c)
 	if token != "" {
-		token = strings.TrimPrefix(token, "Bearer ")
-		token = strings.TrimSpace(token)
-		if token != "" && s.isSessionTokenValid(token, now) {
+		if principal, _, err := s.authenticateSession(c.Request.Context(), token, now); err == nil {
+			if principal.Role != identity.RoleAdmin {
+				abortAuthorization(c, http.StatusForbidden, "forbidden", "权限不足")
+				return false
+			}
 			return true
+		} else if s.identityInitErr != nil {
+			c.JSON(http.StatusServiceUnavailable, gin.H{
+				"status": "error", "code": "identity_unavailable", "message": "身份服务不可用", "request_id": requestID(c),
+			})
+			return false
 		}
 	}
 
@@ -1307,9 +1411,23 @@ func (s *Server) authorizeRotate(c *gin.Context, username string, password strin
 		return false
 	}
 
-	credentials := s.authSnapshot()
-	if username == credentials.Username && checkPassword(credentials.Password, password) {
+	authenticated := false
+	authorized := false
+	if s.identityService != nil {
+		user, err := s.identityService.VerifyCredentials(c.Request.Context(), username, password)
+		authenticated = err == nil
+		authorized = authenticated && user.Role == identity.RoleAdmin
+	} else {
+		credentials := s.authSnapshot()
+		authenticated = username == credentials.Username && checkPassword(credentials.Password, password)
+		authorized = authenticated
+	}
+	if authenticated {
 		release()
+		if !authorized {
+			abortAuthorization(c, http.StatusForbidden, "forbidden", "权限不足")
+			return false
+		}
 		return true
 	}
 	logger.Warn("认证失败", "ip", clientIP, "username", username)
@@ -1324,6 +1442,11 @@ func (s *Server) authorizeRotate(c *gin.Context, username string, password strin
 }
 
 func (s *Server) isSessionTokenValid(token string, now time.Time) bool {
+	_, _, err := s.authenticateSession(context.Background(), token, now)
+	return err == nil
+}
+
+func (s *Server) isLegacySessionTokenValid(token string, now time.Time) bool {
 	decodedBytes, err := base64.StdEncoding.DecodeString(token)
 	if err != nil {
 		return false
@@ -1350,12 +1473,7 @@ func (s *Server) isSessionTokenValid(token string, now time.Time) bool {
 }
 
 func (s *Server) requestSessionToken(c *gin.Context) string {
-	token := strings.TrimSpace(c.GetHeader("Authorization"))
-	if token == "" {
-		return ""
-	}
-	token = strings.TrimPrefix(token, "Bearer ")
-	return strings.TrimSpace(token)
+	return bearerToken(c.GetHeader("Authorization"))
 }
 
 func (s *Server) isAuthenticatedRequest(c *gin.Context, now time.Time) bool {
@@ -1365,7 +1483,8 @@ func (s *Server) isAuthenticatedRequest(c *gin.Context, now time.Time) bool {
 
 func (s *Server) authMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		if s.requestSessionToken(c) == "" {
+		token := s.requestSessionToken(c)
+		if token == "" {
 			c.JSON(http.StatusUnauthorized, gin.H{
 				"status":     "error",
 				"code":       "unauthorized",
@@ -1376,8 +1495,20 @@ func (s *Server) authMiddleware() gin.HandlerFunc {
 			return
 		}
 
-		if s.isAuthenticatedRequest(c, time.Now()) {
+		principal, session, err := s.authenticateSession(c.Request.Context(), token, time.Now())
+		if err == nil {
+			installPrincipal(c, principal, session)
 			c.Next()
+			return
+		}
+		if s.identityInitErr != nil {
+			c.JSON(http.StatusServiceUnavailable, gin.H{
+				"status":     "error",
+				"code":       "identity_unavailable",
+				"message":    "身份服务不可用",
+				"request_id": requestID(c),
+			})
+			c.Abort()
 			return
 		}
 

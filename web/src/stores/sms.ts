@@ -2,6 +2,7 @@ import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import type { AppError } from '../types/domain'
 import type { DeviceMgmtListItem } from '../types/api'
+import type { NumberPoolResource } from '../types/admin-resources'
 import type { SMSMessageDTO, SmsThreadVM } from '../types/view-model'
 import {
   smsService,
@@ -14,6 +15,7 @@ import {
 export const useSMSStore = defineStore('sms', () => {
   const devices = ref<DeviceMgmtListItem[]>([])
   const threads = ref<SmsThreadVM[]>([])
+  const numberPools = ref<NumberPoolResource[]>([])
   const threadMessages = ref<SMSMessageDTO[]>([])
 
   const loading = ref(false)
@@ -35,6 +37,12 @@ export const useSMSStore = defineStore('sms', () => {
     } else {
       error.value = result.error
     }
+    return result
+  }
+
+  async function fetchNumberPools() {
+    const result = await smsService.listNumberPools()
+    if (result.ok) numberPools.value = result.data
     return result
   }
 
@@ -63,12 +71,14 @@ export const useSMSStore = defineStore('sms', () => {
   return {
     devices,
     threads,
+    numberPools,
     threadMessages,
     loading,
     lastOkAt,
     error,
     fetchDevices,
     fetchThreads,
+    fetchNumberPools,
     fetchThread,
     send,
     markThreadRead,

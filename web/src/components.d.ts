@@ -117,6 +117,8 @@ declare module 'vue' {
     ProxyUpstreamInventory: typeof import('./components/proxy/ProxyUpstreamInventory.vue')['default']
     QQNotificationTab: typeof import('./components/settings/QQNotificationTab.vue')['default']
     RefreshButton: typeof import('./components/RefreshButton.vue')['default']
+    ResourceCollectionView: typeof import('./components/resources/ResourceCollectionView.vue')['default']
+    ResourceEditorDrawer: typeof import('./components/resources/ResourceEditorDrawer.vue')['default']
     RouterLink: typeof import('vue-router')['RouterLink']
     RouterView: typeof import('vue-router')['RouterView']
     RuleEditorDrawer: typeof import('./components/commands/RuleEditorDrawer.vue')['default']

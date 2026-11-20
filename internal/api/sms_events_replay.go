@@ -13,19 +13,24 @@ type smsReplay struct {
 	throughID  uint
 	page       []db.SMS
 	incomplete map[uint]bool
+	scope      db.SMSAccessScope
 }
 
 func loadSMSReplay(ctx context.Context, afterID *uint) (*smsReplay, error) {
-	replay := &smsReplay{incomplete: make(map[uint]bool)}
+	return loadSMSReplayScoped(ctx, db.UnrestrictedSMSAccessScope(), afterID)
+}
+
+func loadSMSReplayScoped(ctx context.Context, scope db.SMSAccessScope, afterID *uint) (*smsReplay, error) {
+	replay := &smsReplay{incomplete: make(map[uint]bool), scope: scope}
 	if afterID == nil {
 		return replay, nil
 	}
 	var err error
-	replay.throughID, err = db.IncomingSMSCursor(ctx)
+	replay.throughID, err = db.IncomingSMSCursorScoped(ctx, scope)
 	if err != nil {
 		return nil, err
 	}
-	replay.page, err = db.ListIncomingUnreadSMS(ctx, db.IncomingSMSBacklogQuery{
+	replay.page, err = db.ListIncomingUnreadSMSScoped(ctx, scope, db.IncomingSMSBacklogQuery{
 		AfterID: *afterID, ThroughID: &replay.throughID,
 	})
 	return replay, err
@@ -48,7 +53,7 @@ func (r *smsReplay) write(c *gin.Context) error {
 			break
 		}
 		var err error
-		r.page, err = db.ListIncomingUnreadSMS(c.Request.Context(), db.IncomingSMSBacklogQuery{
+		r.page, err = db.ListIncomingUnreadSMSScoped(c.Request.Context(), r.scope, db.IncomingSMSBacklogQuery{
 			AfterID: afterID, ThroughID: &r.throughID,
 		})
 		if err != nil {

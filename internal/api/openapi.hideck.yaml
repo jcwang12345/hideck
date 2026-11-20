@@ -38,6 +38,10 @@ tags:
     description: eSIM 自动任务与运行记录
   - name: phone
     description: VoWiFi 浏览器实时电话、媒体、事件与录音
+  - name: identity
+    description: 当前用户、成员账号、角色与会话管理
+  - name: resources
+    description: 卡、Profile、号码池、调度策略、通话记录与审计
 paths:
   /mcp/diagnostics:
     get:
@@ -3797,6 +3801,260 @@ paths:
         '503':
           $ref: '#/components/responses/PhoneError'
 
+  /auth/me:
+    get:
+      tags: [identity]
+      summary: 返回当前用户与会话
+      responses:
+        '200': { description: 当前用户与会话 }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+  /auth/logout:
+    post:
+      tags: [identity]
+      summary: 注销当前会话
+      responses:
+        '204': { description: 已注销 }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+  /users:
+    get:
+      tags: [identity]
+      summary: 管理员列出用户
+      responses:
+        '200': { description: 用户列表 }
+        '403': { description: 需要管理员角色 }
+    post:
+      tags: [identity]
+      summary: 管理员创建用户
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [username, password]
+              properties:
+                username: { type: string }
+                password: { type: string, format: password, writeOnly: true }
+                role: { type: string, enum: [admin, member], default: member }
+      responses:
+        '201': { description: 用户已创建 }
+        '403': { description: 需要管理员角色 }
+  /users/{id}:
+    parameters:
+      - in: path
+        name: id
+        required: true
+        schema: { type: string, format: uuid }
+    get:
+      tags: [identity]
+      summary: 管理员读取用户
+      responses:
+        '200': { description: 用户详情 }
+        '403': { description: 需要管理员角色 }
+        '404': { description: 用户不存在 }
+    patch:
+      tags: [identity]
+      summary: 管理员修改用户名、角色或停用状态
+      responses:
+        '200': { description: 用户已更新 }
+        '403': { description: 需要管理员角色 }
+    put:
+      tags: [identity]
+      summary: 管理员修改用户名、角色或停用状态
+      responses:
+        '200': { description: 用户已更新 }
+        '403': { description: 需要管理员角色 }
+    delete:
+      tags: [identity]
+      summary: 管理员停用用户
+      responses:
+        '204': { description: 用户已停用 }
+        '403': { description: 需要管理员角色 }
+  /users/{id}/password:
+    post:
+      tags: [identity]
+      summary: 管理员重置用户密码并撤销既有会话
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200': { description: 密码已重置 }
+        '403': { description: 需要管理员角色 }
+  /users/{id}/sessions/revoke:
+    post:
+      tags: [identity]
+      summary: 管理员撤销用户全部会话
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '204': { description: 会话已撤销 }
+        '403': { description: 需要管理员角色 }
+
+  /cards:
+    get:
+      tags: [resources]
+      summary: 管理员列出卡容器、Profile、运行状态和当日统计
+      description: 仅消费设备已有缓存，不会为了列表查询发送 APDU。
+      responses:
+        '200': { description: 卡资源列表 }
+        '403': { description: 需要管理员角色 }
+  /cards/{id}/disable:
+    post:
+      tags: [resources]
+      summary: 管理员停用一张卡至当日结束
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: 卡已停用 }
+        '403': { description: 需要管理员角色 }
+  /cards/{id}/enable:
+    post:
+      tags: [resources]
+      summary: 管理员恢复一张卡的当日调度资格
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: 卡已启用 }
+        '403': { description: 需要管理员角色 }
+  /cards/{id}/profiles/{profile_id}/actions/activate:
+    post:
+      tags: [resources]
+      summary: 管理员切换 eUICC Profile 并等待身份与 IMS 就绪
+      description: 操作期间持有设备资源锁；失败时尝试恢复原 Profile。
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+        - in: path
+          name: profile_id
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: Profile 已启用或原本已启用 }
+        '403': { description: 需要管理员角色 }
+        '409': { description: 卡不支持切换、设备被占用或离线 }
+        '502': { description: Profile 切换或 IMS 注册失败 }
+
+  /number-pools:
+    get:
+      tags: [resources]
+      summary: 列出当前用户获授权的号码池；管理员可见全部
+      responses:
+        '200': { description: 号码池列表与实时可用数 }
+    post:
+      tags: [resources]
+      summary: 管理员创建号码池
+      responses:
+        '201': { description: 号码池已创建 }
+        '403': { description: 需要管理员角色 }
+  /number-pools/{id}:
+    patch:
+      tags: [resources]
+      summary: 管理员修改号码池
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200': { description: 号码池已更新 }
+        '403': { description: 需要管理员角色 }
+  /number-pools/{id}/members:
+    put:
+      tags: [resources]
+      summary: 管理员替换号码池成员与优先级
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200': { description: 号码池成员已替换 }
+        '403': { description: 需要管理员角色 }
+  /number-pools/{id}/users:
+    put:
+      tags: [resources]
+      summary: 管理员替换号码池用户授权
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200': { description: 用户授权已替换 }
+        '403': { description: 需要管理员角色 }
+  /phone-numbers:
+    get:
+      tags: [resources]
+      summary: 管理员列出 Profile 与本机号码绑定
+      responses:
+        '200': { description: 号码资源列表 }
+        '403': { description: 需要管理员角色 }
+    post:
+      tags: [resources]
+      summary: 管理员新增或更新本机号码
+      responses:
+        '200': { description: 号码资源已保存 }
+        '403': { description: 需要管理员角色 }
+  /dispatch-policies:
+    get:
+      tags: [resources]
+      summary: 管理员列出号码池调度策略
+      responses:
+        '200': { description: 策略列表 }
+        '403': { description: 需要管理员角色 }
+    post:
+      tags: [resources]
+      summary: 管理员保存调度与拒接阈值策略
+      responses:
+        '200': { description: 策略已保存 }
+        '403': { description: 需要管理员角色 }
+  /call-records:
+    get:
+      tags: [resources]
+      summary: 查询通话记录；成员只返回本人记录
+      responses:
+        '200': { description: 分页通话记录 }
+  /audit-events:
+    get:
+      tags: [resources]
+      summary: 管理员查询资源与调度审计事件
+      responses:
+        '200': { description: 分页审计事件 }
+        '403': { description: 需要管理员角色 }
+  /phone/call-requests:
+    post:
+      tags: [phone, resources]
+      summary: 从已授权号码池申请线路并拨号
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [pool_id, callee, media_id]
+              properties:
+                pool_id: { type: string, format: uuid }
+                callee: { type: string }
+                media_id: { type: string }
+      responses:
+        '202': { description: 线路已分配并开始拨号 }
+        '403': { description: 当前用户未获该号码池授权 }
+        '409': { description: 当前用户已有通话或没有可用线路 }
+        '502': { description: 切卡、IMS 注册或拨号失败 }
+
 components:
   securitySchemes:
     BearerAuth:
@@ -5650,7 +5908,7 @@ components:
           description: 当前登录密码是否为初始明文凭证或弱密码
         management:
           type: string
-          enum: [config_file, environment]
+          enum: [config_file, environment, database]
         environment_variable:
           type: string
           description: management=environment 时负责提供密码的环境变量名

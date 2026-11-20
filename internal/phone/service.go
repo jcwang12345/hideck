@@ -45,6 +45,11 @@ type Service struct {
 	autoAnswer          autoAnswerRuntime
 	recordMu            sync.Mutex
 	deletedRecords      map[string]struct{}
+	terminalObserverMu  sync.RWMutex
+	terminalObserver    func(CallRecord)
+	terminalObserved    map[string]struct{}
+	terminalObserverWG  sync.WaitGroup
+	terminalObserverEnd bool
 }
 
 func NewService(options ServiceOptions) (*Service, error) {
@@ -63,6 +68,7 @@ func NewService(options ServiceOptions) (*Service, error) {
 		pendingMediaDrops: make(map[string]*pendingMediaDrop),
 		pendingEvents:     make(map[string][]voicehost.CallEvent), terminalSeen: make(map[string]struct{}),
 		deviceWaiting: make(map[string]string), deletedRecords: make(map[string]struct{}),
+		terminalObserver: options.OnTerminal, terminalObserved: make(map[string]struct{}),
 	}
 	if service.recoveryGrace <= 0 {
 		service.recoveryGrace = defaultRecoveryGrace
@@ -91,6 +97,54 @@ func NewService(options ServiceOptions) (*Service, error) {
 		}
 	}
 	return service, nil
+}
+
+// SetTerminalObserver replaces the terminal-call observer. It is safe to call
+// after construction and concurrently with call completion.
+func (s *Service) SetTerminalObserver(observer func(CallRecord)) {
+	if s == nil {
+		return
+	}
+	s.terminalObserverMu.Lock()
+	if !s.terminalObserverEnd {
+		s.terminalObserver = observer
+	}
+	s.terminalObserverMu.Unlock()
+}
+
+func (s *Service) notifyTerminal(record CallRecord) {
+	if s == nil || strings.TrimSpace(record.CallID) == "" {
+		return
+	}
+	s.terminalObserverMu.Lock()
+	if s.terminalObserverEnd {
+		s.terminalObserverMu.Unlock()
+		return
+	}
+	if s.terminalObserved == nil {
+		s.terminalObserved = make(map[string]struct{})
+	}
+	if _, duplicate := s.terminalObserved[record.CallID]; duplicate {
+		s.terminalObserverMu.Unlock()
+		return
+	}
+	s.terminalObserved[record.CallID] = struct{}{}
+	observer := s.terminalObserver
+	if observer != nil {
+		s.terminalObserverWG.Add(1)
+	}
+	s.terminalObserverMu.Unlock()
+	if observer != nil {
+		go func() {
+			defer s.terminalObserverWG.Done()
+			defer func() {
+				if recovered := recover(); recovered != nil {
+					logger.Error("电话终态观察器异常", "call_id", record.CallID, "panic", recovered)
+				}
+			}()
+			observer(record)
+		}()
+	}
 }
 
 func buildICEServers(urls []string) []webrtc.ICEServer {
@@ -191,7 +245,27 @@ func (s *Service) close(ctx context.Context) error {
 	}
 	s.stopPendingMediaDropTimers()
 	s.cancel()
-	return errors.Join(result, s.media.Close())
+	result = errors.Join(result, s.media.Close())
+	return errors.Join(result, s.waitForTerminalObservers(ctx))
+}
+
+func (s *Service) waitForTerminalObservers(ctx context.Context) error {
+	s.terminalObserverMu.Lock()
+	s.terminalObserverEnd = true
+	s.terminalObserver = nil
+	s.terminalObserverMu.Unlock()
+
+	done := make(chan struct{})
+	go func() {
+		s.terminalObserverWG.Wait()
+		close(done)
+	}()
+	select {
+	case <-done:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
 }
 
 func (s *Service) callSnapshotForClose() []*activeCall {

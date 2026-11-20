@@ -67,6 +67,7 @@ type Request struct {
 	UserData      string
 	ContentType   string
 	Title         string
+	OwnerUserID   string
 	Transport     http.RoundTripper
 	CookieSeeds   []CookieSeed
 	HeaderProfile string
@@ -103,6 +104,7 @@ type Callback struct {
 type Session struct {
 	id                string
 	accessToken       string
+	ownerUserID       string
 	target            *url.URL
 	userData          string
 	contentType       string
@@ -167,6 +169,7 @@ func (b *Broker) Create(ctx context.Context, req Request) (*Session, error) {
 	session := &Session{
 		id:                id,
 		accessToken:       accessToken,
+		ownerUserID:       strings.TrimSpace(req.OwnerUserID),
 		target:            target,
 		userData:          strings.TrimSpace(req.UserData),
 		contentType:       strings.TrimSpace(req.ContentType),
@@ -267,6 +270,26 @@ func (s *Session) Authorize(r *http.Request) error {
 		return ErrUnauthorized
 	}
 	if subtle.ConstantTimeCompare([]byte(token), []byte(s.accessToken)) != 1 {
+		return ErrUnauthorized
+	}
+	return nil
+}
+
+// AuthorizeOwner permits an authenticated administrator or the user that
+// created the websheet session. Carrier pages should continue to use
+// Authorize with the per-session capability instead.
+func (s *Session) AuthorizeOwner(userID string, administrator bool) error {
+	if s == nil {
+		return ErrNotFound
+	}
+	if s.expired() {
+		return ErrExpired
+	}
+	if administrator {
+		return nil
+	}
+	userID = strings.TrimSpace(userID)
+	if userID == "" || s.ownerUserID == "" || userID != s.ownerUserID {
 		return ErrUnauthorized
 	}
 	return nil

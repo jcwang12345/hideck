@@ -205,7 +205,31 @@ func (s *memoryCallStore) List(_ context.Context, _ int) ([]CallRecord, error) {
 	return result, nil
 }
 
+func (s *memoryCallStore) ListByUser(_ context.Context, userID string, limit int) ([]CallRecord, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	result := make([]CallRecord, 0, len(s.records))
+	for _, record := range s.records {
+		if record.UserID != userID {
+			continue
+		}
+		result = append(result, record)
+		if limit > 0 && len(result) == limit {
+			break
+		}
+	}
+	return result, nil
+}
+
 func (s *memoryCallStore) Delete(_ context.Context, ids []uint64) ([]CallRecord, error) {
+	return s.deleteByUser(ids, "", false)
+}
+
+func (s *memoryCallStore) DeleteByUser(_ context.Context, userID string, ids []uint64) ([]CallRecord, error) {
+	return s.deleteByUser(ids, userID, true)
+}
+
+func (s *memoryCallStore) deleteByUser(ids []uint64, userID string, scoped bool) ([]CallRecord, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	wanted := make(map[uint64]struct{}, len(ids))
@@ -214,6 +238,9 @@ func (s *memoryCallStore) Delete(_ context.Context, ids []uint64) ([]CallRecord,
 	}
 	deleted := make([]CallRecord, 0, len(ids))
 	for _, record := range s.records {
+		if scoped && record.UserID != userID {
+			continue
+		}
 		if _, ok := wanted[record.ID]; !ok {
 			continue
 		}
@@ -226,6 +253,17 @@ func (s *memoryCallStore) Delete(_ context.Context, ids []uint64) ([]CallRecord,
 		delete(s.records, record.CallID)
 	}
 	return deleted, nil
+}
+
+func (s *memoryCallStore) FindRecording(_ context.Context, recordingName, userID string) (CallRecord, bool, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for _, record := range s.records {
+		if record.RecordingName == recordingName && (userID == "" || record.UserID == userID) {
+			return record, true, nil
+		}
+	}
+	return CallRecord{}, false, nil
 }
 
 func activeHistoryStatus(status string) bool {

@@ -5,13 +5,18 @@ import (
 	"errors"
 )
 
+var (
+	errEmptyHistorySelection   = errors.New("请选择要删除的通话记录")
+	errHistoryStoreUnavailable = errors.New("电话记录存储未启用")
+)
+
 func (s *Service) DeleteHistory(ctx context.Context, ids []uint64) (int64, error) {
 	ids = uniqueHistoryIDs(ids)
 	if len(ids) == 0 {
-		return 0, errors.New("请选择要删除的通话记录")
+		return 0, errEmptyHistorySelection
 	}
 	if s.store == nil {
-		return 0, errors.New("电话记录存储未启用")
+		return 0, errHistoryStoreUnavailable
 	}
 
 	s.recordMu.Lock()
@@ -20,13 +25,17 @@ func (s *Service) DeleteHistory(ctx context.Context, ids []uint64) (int64, error
 	if err != nil {
 		return 0, err
 	}
+	s.rememberDeletedRecords(records)
+	return int64(len(records)), nil
+}
+
+func (s *Service) rememberDeletedRecords(records []CallRecord) {
 	if s.deletedRecords == nil {
 		s.deletedRecords = make(map[string]struct{})
 	}
 	for _, record := range records {
 		s.deletedRecords[record.CallID] = struct{}{}
 	}
-	return int64(len(records)), nil
 }
 
 func uniqueHistoryIDs(ids []uint64) []uint64 {

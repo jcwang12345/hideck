@@ -14,6 +14,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/yibaiba/hideck/internal/config"
 	"github.com/yibaiba/hideck/internal/db"
+	"github.com/yibaiba/hideck/internal/identity"
 	"github.com/yibaiba/hideck/internal/mcpserver"
 )
 
@@ -30,6 +31,9 @@ func TestMCPAndRESTShareContactWrites(t *testing.T) {
 	recorder := httptest.NewRecorder()
 	requestContext, _ := gin.CreateTestContext(recorder)
 	requestContext.Request = httptest.NewRequest(http.MethodGet, "/api/phone/contacts", nil)
+	installPrincipal(requestContext, identity.Principal{
+		UserID: db.LegacyPhoneContactOwnerID, Username: "web", Role: identity.RoleAdmin,
+	}, identity.WebSession{})
 	server.handlePhoneContactsList(requestContext)
 	if !strings.Contains(recorder.Body.String(), "移动客服") {
 		t.Fatalf("REST missed MCP write: %s", recorder.Body.String())

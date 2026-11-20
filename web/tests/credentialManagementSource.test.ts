@@ -34,6 +34,7 @@ test('settings disables ineffective changes for environment managed passwords', 
 
 test('credential APIs require typed login state and return replacement sessions', () => {
   assert.match(authStore, /isCredentialStatus/)
+  assert.match(authStore, /candidate\.management === 'database'/)
   assert.match(authStore, /isPasswordValidationError/)
   assert.match(authStore, /data\?\.code === 'invalid_password'/)
   assert.match(authStore, /登录响应缺少会话或凭证管理状态/)

@@ -27,6 +27,7 @@ func TestSMSContactsAfterPhysicalModemReplacement(t *testing.T) {
 			}
 			gin.SetMode(gin.TestMode)
 			router := gin.New()
+			router.Use(smsAdminTestMiddleware())
 			router.GET("/sms/contacts", server.handleGetSMSContacts)
 			recorder := httptest.NewRecorder()
 			router.ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/sms/contacts?device_id=issue34-modem", nil))

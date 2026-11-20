@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/yibaiba/hideck/internal/identity"
 	"github.com/yibaiba/hideck/internal/websheet"
 )
 
@@ -39,10 +40,16 @@ func (s *Server) authorizedWebsheetSession(c *gin.Context) (*websheet.Session, e
 		return nil, err
 	}
 	if err := session.Authorize(c.Request); err != nil {
-		if errors.Is(err, websheet.ErrUnauthorized) && s.isAuthenticatedRequest(c, time.Now()) {
-			return session, nil
+		if !errors.Is(err, websheet.ErrUnauthorized) {
+			return nil, err
 		}
-		return nil, err
+		principal, _, authErr := s.authenticateSession(c.Request.Context(), s.requestSessionToken(c), time.Now())
+		if authErr != nil {
+			return nil, err
+		}
+		if ownerErr := session.AuthorizeOwner(principal.UserID, principal.Role == identity.RoleAdmin); ownerErr != nil {
+			return nil, ownerErr
+		}
 	}
 	return session, nil
 }

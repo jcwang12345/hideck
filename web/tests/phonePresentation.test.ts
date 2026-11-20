@@ -63,11 +63,11 @@ test('dial pad is an explicit fixed 3 by 4 control with accessible buttons', () 
   assert.match(phoneView, /<PhoneDialPad :disabled="!!action \|\| !phone\.canSendDTMF" @digit="appendDigit"/)
 })
 
-test('dialer offers the selected SIM calling code without forcing it onto local or short numbers', () => {
-  assert.match(phoneView, /selected\?\.phone_country_code/)
-  assert.match(phoneView, /if \(\(!callee\.value \|\| callee\.value === '\+'\) && selected\.value\?\.phone_country_code\)/)
+test('dialer offers the selected line calling code without forcing it onto local or short numbers', () => {
+  assert.match(phoneView, /const dialCountryCode = computed\(\(\) => usingDiagnosticDial\.value \? selected\.value\?\.phone_country_code : selectedPool\.value\?\.phone_country_code\)/)
+  assert.match(phoneView, /if \(\(!callee\.value \|\| callee\.value === '\+'\) && dialCountryCode\.value\)/)
   assert.match(phoneView, /if \(digit === '\+'\) \{[\s\S]*if \(!callee\.value\) callee\.value = '\+'/)
-  assert.match(phoneView, /dialNumberError\(callee\.value, selected\.value\?\.phone_region\)/)
+  assert.match(phoneView, /dialNumberError\(callee\.value, dialRegion\.value\)/)
   assert.match(phoneView, /id="callee-error" role="alert"/)
   assert.match(phoneView, /:aria-invalid="!!calleeError"/)
   assert.doesNotMatch(phoneView, /callee\.value = '\+86'/)
@@ -160,10 +160,10 @@ test('call history supports explicit single and batch deletion', () => {
   assert.doesNotMatch(callHistory, /class="play-button"/)
 })
 
-test('phone device picker uses the themed select without changing availability rules', () => {
+test('admin diagnostic device picker uses the themed select without changing availability rules', () => {
   assert.doesNotMatch(phoneView, /<select\b/)
   assert.match(phoneView, /<el-select[\s\S]*v-model="selectedDevice"/)
-  assert.match(phoneView, /<label for="phone-device">语音设备<\/label>/)
+  assert.match(phoneView, /<label for="phone-device">语音设备（管理员诊断）<\/label>/)
   assert.match(phoneView, /id="phone-device"[\s\S]*aria-label="语音设备"/)
   assert.match(phoneView, /:disabled="!!call"/)
   assert.match(phoneView, /<el-option v-if="!phone\.devices\.length" label="无可用设备" value=""/)
@@ -183,7 +183,7 @@ test('phone layout has responsive single-column and 44px touch targets', () => {
 test('phone identities stay scoped to the device region and invalidate every cached alias', () => {
   assert.match(contactService, /device_id: deviceId \|\| undefined/)
   assert.match(phoneView, /identities\.resolve\(record\.peer, record\.device_id\)/)
-  assert.match(phoneView, /<PhoneContactsPanel :device-id="selectedDevice"/)
+  assert.match(phoneView, /<PhoneContactsPanel :device-id="identityDeviceID"/)
   assert.match(phoneIdentity, /if \(value\.number === ident\.number\) cache\.set\(key, ident\)/)
   assert.match(phoneIdentity, /if \(drop\.has\(value\.number\)\) cache\.set\(alias, withoutContactName\(value\)\)/)
   assert.match(phoneIdentity, /revision === cacheRevision/)

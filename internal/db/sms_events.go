@@ -14,7 +14,12 @@ const (
 type incomingSMSHub struct {
 	mu          sync.Mutex
 	nextSubID   uint64
-	subscribers map[uint64]chan SMS
+	subscribers map[uint64]incomingSMSSubscriber
+}
+
+type incomingSMSSubscriber struct {
+	stream chan SMS
+	allow  func(SMS) bool
 }
 
 var incomingSMS = newIncomingSMSHub()
@@ -24,11 +29,17 @@ var incomingSMS = newIncomingSMSHub()
 var smsPublicationMu sync.Mutex
 
 func newIncomingSMSHub() *incomingSMSHub {
-	return &incomingSMSHub{subscribers: make(map[uint64]chan SMS)}
+	return &incomingSMSHub{subscribers: make(map[uint64]incomingSMSSubscriber)}
 }
 
 func SubscribeIncomingSMS() (<-chan SMS, func()) {
-	return incomingSMS.subscribe()
+	return incomingSMS.subscribe(nil)
+}
+
+// SubscribeIncomingSMSScoped filters before enqueueing, so unrelated traffic
+// cannot leak through the stream or evict an authorized user's subscription.
+func SubscribeIncomingSMSScoped(scope SMSAccessScope) (<-chan SMS, func()) {
+	return incomingSMS.subscribe(scope.AllowsSMS)
 }
 
 func ListIncomingUnreadSMSAfter(ctx context.Context, afterID uint, limit int) ([]SMS, error) {
@@ -95,27 +106,30 @@ func (hub *incomingSMSHub) publish(sms SMS) {
 	hub.mu.Lock()
 	defer hub.mu.Unlock()
 	for id, subscriber := range hub.subscribers {
+		if subscriber.allow != nil && !subscriber.allow(sms) {
+			continue
+		}
 		select {
-		case subscriber <- sms:
+		case subscriber.stream <- sms:
 		default:
 			delete(hub.subscribers, id)
-			close(subscriber)
+			close(subscriber.stream)
 		}
 	}
 }
 
-func (hub *incomingSMSHub) subscribe() (<-chan SMS, func()) {
+func (hub *incomingSMSHub) subscribe(allow func(SMS) bool) (<-chan SMS, func()) {
 	hub.mu.Lock()
 	defer hub.mu.Unlock()
 	hub.nextSubID++
 	id := hub.nextSubID
 	stream := make(chan SMS, incomingSMSSubscriberBuffer)
-	hub.subscribers[id] = stream
+	hub.subscribers[id] = incomingSMSSubscriber{stream: stream, allow: allow}
 	return stream, func() {
 		hub.mu.Lock()
 		if subscriber, ok := hub.subscribers[id]; ok {
 			delete(hub.subscribers, id)
-			close(subscriber)
+			close(subscriber.stream)
 		}
 		hub.mu.Unlock()
 	}

@@ -14,6 +14,10 @@ import (
 )
 
 func (s *Server) useGetSMSContacts(c businessContext) {
+	access, ok := s.smsAccess(c)
+	if !ok {
+		return
+	}
 	deviceID := c.Query("device_id")
 	imsi := c.Query("imsi")
 
@@ -37,6 +41,10 @@ func (s *Server) useGetSMSContacts(c businessContext) {
 			return
 		}
 		iccid = resolved
+		if !access.scope.AllowsICCID(iccid) {
+			c.JSON(http.StatusNotFound, gin.H{"status": "error", "message": "短信线路不存在"})
+			return
+		}
 	}
 
 	var contacts []db.SMSContact
@@ -44,7 +52,7 @@ func (s *Server) useGetSMSContacts(c businessContext) {
 	if iccid != "" {
 		contacts, err = db.GetSMSContactsByICCID(iccid, limit, beforeTs, beforePeer)
 	} else {
-		contacts, err = db.GetSMSContacts(limit, beforeTs, beforePeer)
+		contacts, err = db.GetSMSContactsScoped(access.scope, limit, beforeTs, beforePeer)
 	}
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"status": "error", "message": "查询数据库失败: " + err.Error()})
@@ -74,6 +82,10 @@ func (s *Server) useGetSMSContacts(c businessContext) {
 }
 
 func (s *Server) useGetSMSThread(c businessContext) {
+	access, ok := s.smsAccess(c)
+	if !ok {
+		return
+	}
 	deviceID := c.Query("device_id")
 	imsi := c.Query("imsi")
 	requestedICCID := db.CanonicalICCID(c.Query("iccid"))
@@ -114,8 +126,12 @@ func (s *Server) useGetSMSThread(c businessContext) {
 		}
 		iccid = resolved
 	}
+	if !access.scope.AllowsICCID(iccid) {
+		c.JSON(http.StatusNotFound, gin.H{"status": "error", "message": "短信会话不存在"})
+		return
+	}
 
-	list, err := db.GetSMSByICCIDAndPeer(iccid, peer, limit, beforeTs, beforeID)
+	list, err := db.GetSMSByICCIDAndPeerScoped(access.scope, iccid, peer, limit, beforeTs, beforeID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"status": "error", "message": "查询数据库失败: " + err.Error()})
 		return
@@ -140,6 +156,10 @@ func (s *Server) useDeleteSMSMessage(c businessContext) {
 		return
 	}
 	defer releaseOperation()
+	access, ok := s.smsAccess(c)
+	if !ok {
+		return
+	}
 
 	id64, err := strconv.ParseUint(strings.TrimSpace(c.Param("id")), 10, 64)
 	if err != nil || id64 == 0 {
@@ -147,7 +167,7 @@ func (s *Server) useDeleteSMSMessage(c businessContext) {
 		return
 	}
 
-	threadEmpty, imsi, peer, err := db.DeleteSMSByID(uint(id64))
+	threadEmpty, imsi, peer, err := db.DeleteSMSByIDScoped(access.scope, uint(id64))
 	if err != nil {
 		if errors.Is(err, db.ErrSMSNotFound) {
 			c.JSON(http.StatusNotFound, gin.H{"status": "error", "message": "短信不存在"})
@@ -171,6 +191,10 @@ func (s *Server) useDeleteSMSThread(c businessContext) {
 		return
 	}
 	defer releaseOperation()
+	access, ok := s.smsAccess(c)
+	if !ok {
+		return
+	}
 
 	deviceID := c.Query("device_id")
 	imsi := c.Query("imsi")
@@ -196,7 +220,7 @@ func (s *Server) useDeleteSMSThread(c businessContext) {
 		}
 	}
 
-	deleted, err := db.DeleteSMSByICCIDAndPeer(resolved, peer)
+	deleted, err := db.DeleteSMSByICCIDAndPeerScoped(access.scope, resolved, peer)
 	if err != nil {
 		if errors.Is(err, db.ErrSMSNotFound) {
 			c.JSON(http.StatusNotFound, gin.H{"status": "error", "message": "短信会话不存在"})

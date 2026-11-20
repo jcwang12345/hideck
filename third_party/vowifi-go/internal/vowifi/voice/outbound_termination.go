@@ -26,7 +26,7 @@ func classifyOutboundInviteOutcome(
 		return "temporarily_unavailable", status, reason, cancelReason
 	case 486, 600:
 		return "busy", status, reason, cancelReason
-	case 603:
+	case 603, 607:
 		return "declined", status, reason, cancelReason
 	}
 	if status >= 300 && status < 400 {
@@ -129,6 +129,7 @@ func (a *Agent) finishOutboundNoAnswer(call *Call) {
 	if call == nil || !call.claimTerminalFinalization() {
 		return
 	}
+	call.setTerminalOutcome("no_answer", 408, imscore.SIPStatusText(408), "network")
 	a.emitCallEnded(call, "no_answer")
 	a.reportCallCleanupError(call, a.finalizeActiveCall(call))
 }

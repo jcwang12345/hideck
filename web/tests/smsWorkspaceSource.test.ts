@@ -39,7 +39,7 @@ test('conversation pane exposes real runtime context and explicit message status
   assert.match(conversationHeader, /context\.imsLabel/)
   assert.match(messageTimeline, /if \(message\.status === 2\) return '已提交'/)
   assert.match(messageTimeline, /if \(message\.status === 3\) return '发送失败'/)
-  assert.match(smsView, /本地号码会按所选 SIM 的归属地转换为国际格式；也可直接输入 \+ 国家码。/)
+  assert.match(smsView, /本地号码会按最终调度线路的归属地转换为国际格式；也可直接输入 \+ 国家码。/)
   assert.doesNotMatch(smsView, /短信已按本卡地区提交至/)
   assert.match(messageTimeline, /max-width: 64%/)
 })

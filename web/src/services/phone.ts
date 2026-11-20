@@ -37,6 +37,34 @@ export type PhoneDevice = {
   lebara_identity_iccid?: string
 }
 
+export type PhoneNumberPoolMember = {
+  id?: string
+  enabled?: boolean
+  status?: string
+  number?: {
+    id?: string
+    e164?: string
+    display_number?: string
+    status?: string
+  }
+}
+
+export type PhoneNumberPool = {
+  id: string
+  name: string
+  description?: string
+  status?: string
+  enabled?: boolean
+  member_count: number
+  available_count: number
+  occupied_count: number
+  authorized_user_count?: number
+  phone_region?: string
+  phone_country_code?: number
+  members?: PhoneNumberPoolMember[]
+  updated_at?: string
+}
+
 export type PhoneCall = {
   call_id: string
   device_id: string
@@ -52,12 +80,38 @@ export type PhoneCall = {
   recording_error?: string
   read_only: boolean
   held?: boolean
+  user_id?: string
+  pool_id?: string
+  pool_name?: string
+  source_number?: string
+  local_number?: string
+}
+
+export type PhoneCallRequestResult = {
+  request: {
+    id: string
+    pool_id: string
+    state: string
+    failure_code?: string
+    failure_reason?: string
+  }
+  lease: {
+    id: string
+    pool_id: string
+    state: string
+    device_id?: string
+    number_id?: string
+  }
+  call: PhoneCall
 }
 
 export type PhoneRecord = {
   id: number
   call_id: string
   device_id: string
+  user_id?: string
+  pool_id?: string
+  source_number?: string
   direction: 'inbound' | 'outbound'
   peer: string
   status: string
@@ -85,6 +139,12 @@ function leaseHeaders(lease: string) {
 const MEDIA_RELEASE_TIMEOUT_MS = 5_000
 
 export const phoneService = {
+  async numberPools() {
+    const payload = (await api.get<{ number_pools?: PhoneNumberPool[] }>('/number-pools')).data
+    if (!Array.isArray(payload?.number_pools)) throw new Error('号码池响应格式无效')
+    return payload.number_pools
+  },
+
   async devices(signal?: AbortSignal) {
     return (await api.get<{ devices: PhoneDevice[] }>('/phone/devices', { signal })).data.devices
   },
@@ -115,6 +175,14 @@ export const phoneService = {
   async startCall(deviceId: string, callee: string, mediaId: string, lease: string) {
     return (await api.post<PhoneCall>('/phone/calls', {
       device_id: deviceId,
+      callee,
+      media_id: mediaId
+    }, { headers: leaseHeaders(lease) })).data
+  },
+
+  async requestCall(poolId: string, callee: string, mediaId: string, lease: string) {
+    return (await api.post<PhoneCallRequestResult>('/phone/call-requests', {
+      pool_id: poolId,
       callee,
       media_id: mediaId
     }, { headers: leaseHeaders(lease) })).data

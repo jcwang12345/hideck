@@ -16,7 +16,14 @@ import { usePhoneIdentity } from '../composables/usePhoneIdentity'
 import { phoneContactsService } from '../services/phone-contacts'
 import { formatCallTime, formatRecordDuration, phoneErrorMessage, phoneRecordStatusLabel } from '../utils/phone'
 
-const props = defineProps<{ records: PhoneRecord[] }>()
+const props = defineProps<{
+  records: PhoneRecord[]
+  redialDisabled?: boolean
+  showDeviceId?: boolean
+}>()
+const emit = defineEmits<{
+  redial: [record: PhoneRecord]
+}>()
 const identities = usePhoneIdentity()
 
 const phone = usePhoneStore()
@@ -75,7 +82,6 @@ const loadingRecordings = new Map<number, string>()
 const recordingNames = new Map<number, string>()
 const recordingErrorNames = new Map<number, string>()
 const audioElements = new Map<number, HTMLAudioElement>()
-const redialing = ref(false)
 let observer: IntersectionObserver | null = null
 
 function withoutRecord<T>(values: Record<number, T>, id: number): Record<number, T> {
@@ -89,16 +95,12 @@ function statusIcon(record: PhoneRecord) {
   return record.direction === 'inbound' ? CallInbound24Regular : CallOutbound24Regular
 }
 
-// 回拨：复用拨号流程，直接以该记录的对端号码发起双向呼叫。
+// 回拨交给电话页统一处理：号码池模式必须继续走调度，只有管理员
+// 明确进入设备诊断后，父页面才会使用历史设备直接拨号。
 function redial(record: PhoneRecord) {
   const peer = String(record.peer || '').trim()
-  if (!peer || redialing.value || phone.currentCall) return
-  redialing.value = true
-  void phone.startCall(record.device_id, peer)
-    .catch((error) => {
-      ElMessage.error(error instanceof Error ? error.message : '回拨失败')
-    })
-    .finally(() => { redialing.value = false })
+  if (!peer || props.redialDisabled) return
+  emit('redial', record)
 }
 
 function setSelected(id: number, checked: boolean) {
@@ -314,7 +316,8 @@ onUnmounted(() => {
           <div class="history-secondary">
             <span :class="`status-${record.status}`">{{ phoneRecordStatusLabel(record) }}</span>
             <span>{{ formatRecordDuration(record) }}</span>
-            <span>{{ record.device_id }}</span>
+            <span v-if="showDeviceId">{{ record.device_id }}</span>
+            <span v-else>{{ record.source_number || (record.pool_id ? '号码池调度' : '线路已隐藏') }}</span>
           </div>
           <p
             class="history-attribution"
@@ -343,7 +346,7 @@ onUnmounted(() => {
           </button>
           <template #dropdown>
             <el-dropdown-menu>
-              <el-dropdown-item command="redial" :disabled="!record.peer || redialing || !!phone.currentCall">
+              <el-dropdown-item command="redial" :disabled="!record.peer || redialDisabled">
                 <el-icon><Call24Regular /></el-icon>回拨
               </el-dropdown-item>
               <el-dropdown-item command="contact" :disabled="!record.peer">

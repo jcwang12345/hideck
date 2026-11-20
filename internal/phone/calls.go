@@ -74,10 +74,15 @@ func (s *Service) newOutboundCall(
 ) *activeCall {
 	view := CallView{
 		CallID: snapshot.CallID, DeviceID: request.DeviceID, Direction: "outbound",
-		Peer: request.Callee, Status: StatusCalling, MediaID: request.MediaID, StartedAt: startedAt,
+		UserID: request.Owner, PoolID: request.PoolID, SourceNumber: request.SourceNumber,
+		RequestID: request.RequestID, Peer: request.Callee, Status: StatusCalling,
+		MediaID: request.MediaID, StartedAt: startedAt,
 	}
 	record := CallRecord{
 		CallID: snapshot.CallID, DeviceID: request.DeviceID, ICCID: s.iccid(request.DeviceID),
+		UserID: request.Owner, PoolID: request.PoolID, CardID: request.CardID,
+		ProfileID: request.ProfileID, NumberID: request.NumberID, SourceNumber: request.SourceNumber,
+		RequestID: request.RequestID, ResourceLeaseID: request.ResourceLeaseID,
 		Direction: "outbound", Peer: request.Callee, Status: StatusCalling, StartedAt: startedAt,
 	}
 	if endpoint, err := parseRTPEndpoint(snapshot.ClientSDP); err == nil && endpoint.Codec != "" {
@@ -144,6 +149,10 @@ func (s *Service) Reject(request ControlRequest) error {
 	}
 	call.userRejected = true
 	call.owner, call.lease, call.mediaID = request.Owner, request.Lease, reservation.mediaID
+	if call.view.UserID == "" {
+		call.view.UserID = request.Owner
+		call.record.UserID = request.Owner
+	}
 	call.view.MediaID = reservation.mediaID
 	deviceID := call.view.DeviceID
 	s.mu.Unlock()
@@ -329,6 +338,10 @@ func (s *Service) assignControl(callID string, reservation *mediaReservation) er
 		return err
 	}
 	call.owner, call.lease, call.mediaID = reservation.media.Owner, reservation.media.Lease, reservation.mediaID
+	if call.view.UserID == "" {
+		call.view.UserID = reservation.media.Owner
+		call.record.UserID = reservation.media.Owner
+	}
 	call.view.MediaID = reservation.mediaID
 	s.mu.Unlock()
 	s.resumePendingMediaDrop(reservation.mediaID, pendingMediaDrop)

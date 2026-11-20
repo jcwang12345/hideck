@@ -43,6 +43,7 @@ func TestSMSThreadReturnsReconciledMultipartMessage(t *testing.T) {
 	server := &Server{pool: pool}
 	gin.SetMode(gin.TestMode)
 	router := gin.New()
+	router.Use(smsAdminTestMiddleware())
 	router.GET("/sms/thread", server.handleGetSMSThread)
 	query := url.Values{"device_id": {"all"}, "imsi": {imsi}, "peer": {"giffgaff"}}
 	recorder := httptest.NewRecorder()

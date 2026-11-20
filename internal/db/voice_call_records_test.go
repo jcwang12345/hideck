@@ -215,3 +215,56 @@ func TestVoiceCallStoreRejectsBatchContainingActiveRecord(t *testing.T) {
 		t.Fatalf("remaining = %d, want 2", len(remaining))
 	}
 }
+
+func TestVoiceCallStoreScopesHistoryDeleteAndRecordingByUser(t *testing.T) {
+	store := newVoiceCallTestStore(t)
+	ctx := context.Background()
+	started := time.Now().UTC()
+	for _, record := range []phone.CallRecord{
+		{CallID: "user-a-call", DeviceID: "dev-a", UserID: "user-a", Direction: "outbound", Status: phone.StatusCompleted, StartedAt: started, RecordingName: "call_a.mp3"},
+		{CallID: "user-b-call", DeviceID: "dev-b", UserID: "user-b", Direction: "outbound", Status: phone.StatusConnected, StartedAt: started.Add(time.Second), RecordingName: "call_b.mp3"},
+	} {
+		if err := store.Upsert(ctx, record); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	userA, err := store.ListByUser(ctx, "user-a", 50)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(userA) != 1 || userA[0].CallID != "user-a-call" {
+		t.Fatalf("user-a history = %+v", userA)
+	}
+	if _, found, err := store.FindRecording(ctx, "call_b.mp3", "user-a"); err != nil || found {
+		t.Fatalf("cross-user recording found=%v err=%v", found, err)
+	}
+	if record, found, err := store.FindRecording(ctx, "call_b.mp3", ""); err != nil || !found || record.UserID != "user-b" {
+		t.Fatalf("admin recording = %+v found=%v err=%v", record, found, err)
+	}
+
+	all, err := store.List(ctx, 50)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var userAID, userBID uint64
+	for _, record := range all {
+		switch record.UserID {
+		case "user-a":
+			userAID = record.ID
+		case "user-b":
+			userBID = record.ID
+		}
+	}
+	deleted, err := store.DeleteByUser(ctx, "user-a", []uint64{userAID, userBID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(deleted) != 1 || deleted[0].UserID != "user-a" {
+		t.Fatalf("scoped deleted = %+v", deleted)
+	}
+	remaining, err := store.List(ctx, 50)
+	if err != nil || len(remaining) != 1 || remaining[0].UserID != "user-b" {
+		t.Fatalf("remaining = %+v err=%v", remaining, err)
+	}
+}

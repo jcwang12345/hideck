@@ -85,6 +85,49 @@ func TestInfoEmbedURLCarriesSessionAccessToken(t *testing.T) {
 	}
 }
 
+func TestSessionOwnerAuthorization(t *testing.T) {
+	b := New(Config{})
+	session, err := b.Create(context.Background(), Request{
+		URL:         "https://203.0.113.10/",
+		OwnerUserID: " owner-user ",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	tests := []struct {
+		name          string
+		userID        string
+		administrator bool
+		wantErr       error
+	}{
+		{name: "owner", userID: "owner-user"},
+		{name: "trimmed owner", userID: " owner-user "},
+		{name: "different user", userID: "other-user", wantErr: ErrUnauthorized},
+		{name: "missing user", wantErr: ErrUnauthorized},
+		{name: "administrator", userID: "other-user", administrator: true},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			err := session.AuthorizeOwner(test.userID, test.administrator)
+			if !errors.Is(err, test.wantErr) {
+				t.Fatalf("AuthorizeOwner(%q, %v) error=%v want %v", test.userID, test.administrator, err, test.wantErr)
+			}
+		})
+	}
+
+	unowned, err := b.Create(context.Background(), Request{URL: "https://203.0.113.11/"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := unowned.AuthorizeOwner("member-user", false); !errors.Is(err, ErrUnauthorized) {
+		t.Fatalf("unowned session member authorization error=%v, want ErrUnauthorized", err)
+	}
+	if err := unowned.AuthorizeOwner("admin-user", true); err != nil {
+		t.Fatalf("unowned session administrator authorization error=%v", err)
+	}
+}
+
 func TestPostBootstrapProxiesRawUserDataBody(t *testing.T) {
 	const rawPostData = "method%3Dupdate-tc-loc%26devicetype%3Dphone%26authtoken%3DAXBCRgUM"
 	var gotBody string

@@ -27,6 +27,7 @@ func TestOutboundInviteOutcomeClassification(t *testing.T) {
 		{name: "busy", status: 486, reason: "Busy Here", wantKind: "busy", wantText: "对方忙线 (486 Busy Here)"},
 		{name: "global busy", status: 600, reason: "Busy Everywhere", wantKind: "busy", wantText: "对方忙线 (600 Busy Everywhere)"},
 		{name: "declined", status: 603, reason: "Decline", wantKind: "declined", wantText: "对方拒接 (603 Decline)"},
+		{name: "declined globally", status: 607, reason: "Unwanted", wantKind: "declined", wantText: "对方拒接 (607 Unwanted)"},
 		{name: "redirected", status: 302, reason: "Moved Temporarily", wantKind: "redirected", wantText: "呼叫失败 (302 Moved Temporarily)"},
 		{name: "no answer flag", status: 487, reason: "Request Terminated", noAnswer: true, wantKind: "no_answer", wantText: "无人接听（30s 超时）"},
 		{name: "no answer marker", cancelReason: "no_answer", wantKind: "no_answer", wantText: "无人接听（30s 超时）"},

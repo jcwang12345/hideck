@@ -4,6 +4,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Loading } from '@element-plus/icons-vue'
 import { useSMSStore } from '../stores/sms'
+import { useAuthStore } from '../stores/auth'
 import { usePollingScheduler } from '../composables/usePollingScheduler'
 import { toAppError } from '../services/http'
 import { resolveSmsThreadKey, type SmsThreadQueryParams } from '../services/sms'
@@ -18,6 +19,7 @@ import SmsMessageTimeline from '../components/sms/SmsMessageTimeline.vue'
 import SmsComposer from '../components/sms/SmsComposer.vue'
 import PhoneContactsDrawer from '../components/PhoneContactsDrawer.vue'
 import type { DeviceMgmtListItem, SMSMessage } from '../types/api'
+import type { NumberPoolResource } from '../types/admin-resources'
 import { Delete24Regular, Person24Regular, Send24Regular } from '@vicons/fluent'
 import 'vue-virtual-scroller/dist/vue-virtual-scroller.css'
 import { formatDeviceDate } from '../utils/deviceTime'
@@ -28,6 +30,12 @@ import {
   mergeSmsThreadPages,
   threadAlreadyHasLatest
 } from '../utils/smsThreadMessages'
+import {
+  chooseSmsPoolID,
+  smsDispatchErrorMessage,
+  smsPoolAvailableCount,
+  smsPoolEnabled
+} from '../utils/smsDispatch'
 
 type SmsThread = {
   key: string
@@ -48,6 +56,7 @@ type SmsThread = {
 const route = useRoute()
 const router = useRouter()
 const smsStore = useSMSStore()
+const auth = useAuthStore()
 
 const devices = ref<DeviceMgmtListItem[]>([])
 const devicesLastOkAt = ref<number | null>(null)
@@ -58,7 +67,7 @@ const threads = ref<SmsThread[]>([])
 const messagesLastOkAt = ref<number | null>(null)
 const messagesError = ref<{ message: string; status?: number; method?: string; url?: string } | null>(null)
 
-const selectedDevice = ref<string>(typeof route.query.device === 'string' ? route.query.device : 'all')
+const selectedDevice = ref<string>(auth.isAdmin && typeof route.query.device === 'string' ? route.query.device : 'all')
 const selectedThreadKey = ref<string>(typeof route.query.contact === 'string' ? route.query.contact : '')
 const targetMessageQuery = ref<unknown>(route.query.message)
 const messageTarget = ref<SmsMessageTarget | null>(null)
@@ -72,7 +81,7 @@ const mobileStage = ref<SmsMobileStage>(
     ? 'conversation'
     : selectedDevice.value !== 'all'
       ? 'threads'
-      : 'devices'
+      : auth.isAdmin ? 'devices' : 'threads'
 )
 
 const smsPageRef = ref<HTMLElement | null>(null)
@@ -179,14 +188,47 @@ const followingLatest = ref(true)
 let followLatestTimer = 0
 
 const sendForm = ref({
-  device_id: '',
   phone: '',
   message: ''
 })
 const sendEstimate = computed(() => estimateSegments(String(sendForm.value.message || '')))
 
+type SmsSendMode = 'pool' | 'diagnostic'
+const sendMode = ref<SmsSendMode>('pool')
 const selectedSendDeviceId = ref('')
 const sendDeviceOptions = computed(() => devices.value.map(d => ({ label: `${d.name || d.id}`, value: d.id })))
+const numberPools = ref<NumberPoolResource[]>([])
+const poolsLoading = ref(false)
+const poolsError = ref('')
+const selectedSendPoolId = ref('')
+const selectedSendNumberId = ref('')
+const selectableNumberPools = computed(() => numberPools.value.filter(
+  (pool): pool is NumberPoolResource & { id: string } => typeof pool.id === 'string' && !!pool.id
+))
+const effectiveSendMode = computed<SmsSendMode>(() => auth.isAdmin && sendMode.value === 'diagnostic' ? 'diagnostic' : 'pool')
+const selectedSendPool = computed(() => numberPools.value.find(pool => pool.id === selectedSendPoolId.value))
+const selectedPoolNumbers = computed(() => (selectedSendPool.value?.members || [])
+  .filter(member => member.enabled !== false && member.phone_number_id)
+  .map(member => ({
+    value: member.phone_number_id,
+    label: member.number?.label
+      ? `${member.number.label} · ${member.number.e164 || member.phone_number_id}`
+      : member.number?.e164 || member.phone_number_id
+  })))
+const selectedPoolAvailable = computed(() => smsPoolAvailableCount(selectedSendPool.value))
+const sendRouteReason = computed(() => {
+  if (effectiveSendMode.value === 'diagnostic') {
+    return selectedSendDeviceId.value ? '' : '请选择管理员诊断设备'
+  }
+  if (poolsLoading.value) return '正在加载已授权号码池'
+  if (poolsError.value) return poolsError.value
+  if (numberPools.value.length === 0) return '当前账号没有已授权号码池，请联系管理员授权'
+  if (!selectedSendPool.value || !smsPoolEnabled(selectedSendPool.value)) return '请选择可用号码池'
+  if (selectedPoolAvailable.value === 0) return '当前号码池暂无可发送短信的线路'
+  return ''
+})
+const sendRouteReady = computed(() => !sendRouteReason.value)
+const contactsDeviceId = computed(() => effectiveSendMode.value === 'diagnostic' ? selectedSendDeviceId.value : '')
 
 const deviceSidebarItems = computed(() => createSmsDeviceChannels(devices.value))
 const conversationContext = computed(() => createSmsConversationContext({
@@ -194,6 +236,12 @@ const conversationContext = computed(() => createSmsConversationContext({
   thread: selectedThread.value,
   devices: devices.value
 }))
+
+watch(selectedSendPoolId, () => {
+  if (!selectedPoolNumbers.value.some(option => option.value === selectedSendNumberId.value)) {
+    selectedSendNumberId.value = ''
+  }
+})
 
 function normalizeQueryDevice(device: string) {
   const v = String(device || '').trim()
@@ -277,8 +325,10 @@ async function loadMoreHistory() {
     }
     if (selectedThread.value.iccid) {
       params.iccid = selectedThread.value.iccid
-    } else if (selectedDevice.value && selectedDevice.value !== 'all') {
+    } else if (auth.isAdmin && selectedDevice.value && selectedDevice.value !== 'all') {
       params.device_id = selectedDevice.value
+    } else if (!auth.isAdmin) {
+      params.imsi = selectedThread.value.imsi
     } else {
       params.device_id = 'all'
       params.imsi = selectedThread.value.imsi
@@ -370,12 +420,22 @@ function clearSelectedThread(syncRoute = false) {
 }
 
 async function fetchDevices() {
+  if (!auth.isAdmin) {
+    devices.value = []
+    selectedDevice.value = 'all'
+    return true
+  }
   const seq = ++devicesFetchSeq
   devicesError.value = null
   const result = await smsStore.fetchDevices()
   if (seq !== devicesFetchSeq) return false
   if (result.ok) {
     devices.value = (result.data || []) as DeviceMgmtListItem[]
+    if (!devices.value.some(device => device.id === selectedSendDeviceId.value)) {
+      selectedSendDeviceId.value = selectedDevice.value !== 'all' && devices.value.some(device => device.id === selectedDevice.value)
+        ? selectedDevice.value
+        : (devices.value[0]?.id || '')
+    }
     devicesLastOkAt.value = Date.now()
     if (selectedDevice.value !== 'all' && !devices.value.some(d => d.id === selectedDevice.value)) {
       selectedDevice.value = 'all'
@@ -393,7 +453,7 @@ async function fetchMessages(silent = false) {
   const seq = ++messagesFetchSeq
   if (!silent) loading.value = true
   messagesError.value = null
-  const result = await smsStore.fetchThreads(selectedDevice.value)
+  const result = await smsStore.fetchThreads(auth.isAdmin ? selectedDevice.value : undefined)
   if (seq !== messagesFetchSeq) return false
   if (targetMessageQuery.value !== undefined) {
     const target = await fetchSmsMessageTarget(targetMessageQuery.value)
@@ -436,8 +496,10 @@ async function fetchThreadLatest(silent = false) {
   const params: SmsThreadQueryParams = { peer: t.peer, limit: SMS_THREAD_PAGE_SIZE }
   if (t.iccid) {
     params.iccid = t.iccid
-  } else if (selectedDevice.value && selectedDevice.value !== 'all') {
+  } else if (auth.isAdmin && selectedDevice.value && selectedDevice.value !== 'all') {
     params.device_id = selectedDevice.value
+  } else if (!auth.isAdmin) {
+    params.imsi = t.imsi
   } else {
     params.device_id = 'all'
     params.imsi = t.imsi
@@ -544,6 +606,7 @@ async function applyThreadSeen(thread: SmsThread) {
 }
 
 async function handleSelectDevice(deviceId: string, options: { syncRoute?: boolean; silent?: boolean } = {}) {
+  if (!auth.isAdmin) return
   const nextDevice = String(deviceId || 'all').trim() || 'all'
   const syncRoute = options.syncRoute !== false
   const silent = options.silent === true
@@ -561,7 +624,7 @@ async function handleSelectDevice(deviceId: string, options: { syncRoute?: boole
 }
 
 function showMobileDevices() {
-  mobileStage.value = 'devices'
+  mobileStage.value = auth.isAdmin ? 'devices' : 'threads'
   closeActionSheet()
 }
 
@@ -577,8 +640,22 @@ async function fetchMessagesAndThread(silent = false) {
 }
 
 async function refreshAll() {
-  await fetchDevices()
+  await Promise.all([fetchDevices(), fetchNumberPools()])
   await fetchMessagesAndThread()
+}
+
+async function fetchNumberPools() {
+  poolsLoading.value = true
+  poolsError.value = ''
+  const result = await smsStore.fetchNumberPools()
+  poolsLoading.value = false
+  if (!result.ok) {
+    poolsError.value = result.error.message || '号码池加载失败'
+    return false
+  }
+  numberPools.value = result.data
+  selectedSendPoolId.value = chooseSmsPoolID(numberPools.value, selectedSendPoolId.value)
+  return true
 }
 
 async function showLatestMessages() {
@@ -634,7 +711,10 @@ onMounted(async () => {
     window.addEventListener('resize', syncSmsPageWidth, { passive: true })
   }
   const initialDevice = selectedDevice.value
-  let [, messagesOk] = await Promise.all([fetchDevices(), fetchMessages()])
+  let [, messagesOk] = await Promise.all([
+    Promise.all([fetchDevices(), fetchNumberPools()]),
+    fetchMessages()
+  ])
   if (!messagesOk && selectedDevice.value !== initialDevice) {
     messagesOk = await fetchMessages()
   }
@@ -655,6 +735,8 @@ function openSendModal() {
   sendForm.value.phone = ''
   sendForm.value.message = ''
   selectedSendDeviceId.value = selectedDevice.value !== 'all' ? selectedDevice.value : (devices.value[0]?.id || '')
+  selectedSendPoolId.value = chooseSmsPoolID(numberPools.value, selectedSendPoolId.value)
+  if (numberPools.value.length === 0 && !poolsLoading.value) void fetchNumberPools()
   showSendModal.value = true
 }
 
@@ -664,18 +746,32 @@ function applyContactNumber(number: string) {
 }
 
 async function handleSendModal() {
-  if (!selectedSendDeviceId.value || !sendForm.value.phone || !sendForm.value.message) {
+  if (!sendForm.value.phone.trim() || !sendForm.value.message.trim()) {
     ElMessage.warning('请填写完整信息')
+    return
+  }
+  if (!sendRouteReady.value) {
+    ElMessage.warning(sendRouteReason.value)
     return
   }
   sending.value = true
   try {
-    const result = await smsStore.send({
-      device_id: selectedSendDeviceId.value,
-      phone: sendForm.value.phone,
-      message: sendForm.value.message
-    })
-    if (!result.ok) throw new Error(result.error.message || '发送失败')
+    const result = effectiveSendMode.value === 'diagnostic'
+      ? await smsStore.send({
+          device_id: selectedSendDeviceId.value,
+          phone: sendForm.value.phone.trim(),
+          message: sendForm.value.message.trim()
+        })
+      : await smsStore.send({
+          pool_id: selectedSendPoolId.value,
+          number_id: selectedSendNumberId.value || undefined,
+          phone: sendForm.value.phone.trim(),
+          message: sendForm.value.message.trim()
+        })
+    if (!result.ok) {
+      ElMessage.error('发送失败：' + smsDispatchErrorMessage(result.error))
+      return
+    }
     const parts = result.data.partsTotal
     ElMessage.success(`短信已提交${parts > 1 ? `（${parts}段）` : ''}`)
     showSendModal.value = false
@@ -683,8 +779,7 @@ async function handleSendModal() {
       await fetchMessagesAndThread()
     }, 800)
   } catch (e: unknown) {
-    const err = toAppError(e)
-    ElMessage.error('发送失败：' + (err.message || '未知错误'))
+    ElMessage.error('发送失败：' + smsDispatchErrorMessage(e))
   } finally {
     sending.value = false
   }
@@ -695,14 +790,24 @@ async function sendToCurrentThread() {
   if (!t) return
   const text = String(composer.value || '').trim()
   if (!text) return
-  if (!t.iccid) {
-    ElMessage.error('短信会话缺少 ICCID，无法确定外呼 SIM 卡')
+  if (!sendRouteReady.value) {
+    ElMessage.warning(sendRouteReason.value)
     return
   }
   sending.value = true
   try {
-    const result = await smsStore.send({ iccid: t.iccid, phone: t.peer, message: text })
-    if (!result.ok) throw new Error(result.error.message || '发送失败')
+    const result = effectiveSendMode.value === 'diagnostic'
+      ? await smsStore.send({ device_id: selectedSendDeviceId.value, phone: t.peer, message: text })
+      : await smsStore.send({
+          pool_id: selectedSendPoolId.value,
+          number_id: selectedSendNumberId.value || undefined,
+          phone: t.peer,
+          message: text
+        })
+    if (!result.ok) {
+      ElMessage.error('发送失败：' + smsDispatchErrorMessage(result.error))
+      return
+    }
     composer.value = ''
     if (viewingTarget.value && selectedThreadKey.value === t.key) {
       showLatestMessages()
@@ -713,8 +818,7 @@ async function sendToCurrentThread() {
       await fetchMessagesAndThread()
     }, 800)
   } catch (e: unknown) {
-    const err = toAppError(e)
-    ElMessage.error('发送失败：' + (err.message || '未知错误'))
+    ElMessage.error('发送失败：' + smsDispatchErrorMessage(e))
   } finally {
     sending.value = false
   }
@@ -801,7 +905,7 @@ async function confirmDeleteThread(thread: SmsThread) {
   <div ref="smsPageRef" class="app-page sms-page h-[calc(100vh-144px)] flex flex-col">
     <div class="sms-page-errors" aria-live="polite">
       <ErrorState
-        v-if="devicesError"
+        v-if="auth.isAdmin && devicesError"
         class="sms-page-error"
         title="设备列表加载失败"
         :message="devicesError.message"
@@ -832,8 +936,9 @@ async function confirmDeleteThread(thread: SmsThread) {
         <el-icon class="is-loading" size="28"><Loading /></el-icon>
       </div>
 
-      <div class="sms-main-layout" :data-mobile-stage="mobileStage">
+      <div class="sms-main-layout" :class="{ 'is-member': !auth.isAdmin }" :data-mobile-stage="mobileStage">
         <SmsDeviceRail
+          v-if="auth.isAdmin"
           class="sms-stage-pane sms-stage-devices"
           :items="deviceSidebarItems"
           :selected-id="selectedDevice"
@@ -847,7 +952,7 @@ async function confirmDeleteThread(thread: SmsThread) {
           :selected-key="selectedThreadKey"
           :loading="loading"
           :deleting-key="deletingThreadKey"
-          :show-back="isNarrowLayout"
+          :show-back="isNarrowLayout && auth.isAdmin"
           @back="showMobileDevices"
           @select="(key) => void selectThread(key)"
           @delete="(thread) => void confirmDeleteThread(thread)"
@@ -890,6 +995,38 @@ async function confirmDeleteThread(thread: SmsThread) {
             />
           </div>
 
+          <div v-if="selectedThread" class="sms-send-route" :class="{ 'is-warning': !!sendRouteReason }">
+            <div v-if="auth.isAdmin" class="sms-send-mode">
+              <span>发送方式</span>
+              <el-radio-group v-model="sendMode" size="small">
+                <el-radio-button value="pool">号码池调度</el-radio-button>
+                <el-radio-button value="diagnostic">管理员设备诊断</el-radio-button>
+              </el-radio-group>
+            </div>
+            <div v-if="effectiveSendMode === 'pool'" class="sms-route-controls">
+              <el-select v-model="selectedSendPoolId" :loading="poolsLoading" placeholder="选择已授权号码池" aria-label="短信发送号码池">
+                <el-option
+                  v-for="pool in selectableNumberPools"
+                  :key="pool.id"
+                  :disabled="!smsPoolEnabled(pool)"
+                  :label="`${pool.name || '未命名号码池'} · ${smsPoolAvailableCount(pool)} 条可用`"
+                  :value="pool.id"
+                />
+              </el-select>
+              <el-select v-model="selectedSendNumberId" clearable placeholder="自动选择线路" aria-label="指定号码（可选）">
+                <el-option v-for="number in selectedPoolNumbers" :key="number.value" :label="number.label" :value="number.value" />
+              </el-select>
+            </div>
+            <div v-else class="sms-route-controls sms-diagnostic-controls">
+              <el-select v-model="selectedSendDeviceId" placeholder="选择诊断设备" aria-label="管理员短信诊断设备">
+                <el-option v-for="opt in sendDeviceOptions" :key="opt.value" :label="opt.label" :value="opt.value" />
+              </el-select>
+              <p>管理员诊断：指定当前设备线路发送，仍受设备占用、卡停用和调度锁限制。</p>
+            </div>
+            <p v-if="sendRouteReason" class="sms-route-reason" role="status">{{ sendRouteReason }}</p>
+            <p v-else-if="effectiveSendMode === 'pool'" class="sms-route-ready">将由「{{ selectedSendPool?.name }}」调度，当前 {{ selectedPoolAvailable }} 条线路可用</p>
+          </div>
+
           <SmsComposer
             v-if="selectedThread"
             v-model="composer"
@@ -897,6 +1034,8 @@ async function confirmDeleteThread(thread: SmsThread) {
             :parts="composerEstimate.parts"
             :length="composerLen"
             :sending="sending"
+            :disabled="!sendRouteReady"
+            :disabled-reason="sendRouteReason"
             @send="sendToCurrentThread"
           />
         </section>
@@ -919,11 +1058,37 @@ async function confirmDeleteThread(thread: SmsThread) {
     <!-- Send Modal -->
     <el-dialog v-model="showSendModal" title="发送短信" width="min(520px, 92vw)" class="glass-modal">
       <el-form label-position="top" class="mt-2">
-        <el-form-item label="发送设备">
+        <el-form-item v-if="auth.isAdmin" label="发送方式">
+          <el-radio-group v-model="sendMode">
+            <el-radio-button value="pool">号码池调度</el-radio-button>
+            <el-radio-button value="diagnostic">管理员设备诊断</el-radio-button>
+          </el-radio-group>
+        </el-form-item>
+        <template v-if="effectiveSendMode === 'pool'">
+          <el-form-item label="已授权号码池">
+            <el-select v-model="selectedSendPoolId" :loading="poolsLoading" placeholder="选择号码池">
+              <el-option
+                v-for="pool in selectableNumberPools"
+                :key="pool.id"
+                :disabled="!smsPoolEnabled(pool)"
+                :label="`${pool.name || '未命名号码池'} · ${smsPoolAvailableCount(pool)} 条可用`"
+                :value="pool.id"
+              />
+            </el-select>
+          </el-form-item>
+          <el-form-item label="指定号码（可选）">
+            <el-select v-model="selectedSendNumberId" clearable placeholder="由系统自动选择可用线路">
+              <el-option v-for="number in selectedPoolNumbers" :key="number.value" :label="number.label" :value="number.value" />
+            </el-select>
+          </el-form-item>
+        </template>
+        <el-form-item v-else label="管理员诊断设备">
           <el-select v-model="selectedSendDeviceId" placeholder="选择设备">
             <el-option v-for="opt in sendDeviceOptions" :key="opt.value" :label="opt.label" :value="opt.value" />
           </el-select>
+          <small class="text-xs text-[var(--ui-text-muted)]">指定当前设备线路发送，仍受设备占用、卡停用和调度锁限制。</small>
         </el-form-item>
+        <div v-if="sendRouteReason" class="sms-modal-route-state" role="status">{{ sendRouteReason }}</div>
         <el-form-item label="目标号码">
           <div class="sms-recipient-field">
             <el-input v-model="sendForm.phone" placeholder="+86138..." />
@@ -932,7 +1097,7 @@ async function confirmDeleteThread(thread: SmsThread) {
               联系人
             </el-button>
           </div>
-          <small class="text-xs text-[var(--ui-text-muted)]">本地号码会按所选 SIM 的归属地转换为国际格式；也可直接输入 + 国家码。</small>
+          <small class="text-xs text-[var(--ui-text-muted)]">本地号码会按最终调度线路的归属地转换为国际格式；也可直接输入 + 国家码。</small>
         </el-form-item>
         <el-form-item label="短信内容">
           <el-input
@@ -950,7 +1115,7 @@ async function confirmDeleteThread(thread: SmsThread) {
       <template #footer>
         <div class="flex justify-end gap-3">
           <el-button @click="showSendModal = false">取消</el-button>
-          <el-button type="primary" :loading="sending" @click="handleSendModal">
+          <el-button type="primary" :loading="sending" :disabled="!sendRouteReady" @click="handleSendModal">
             <el-icon><Send24Regular /></el-icon>
             发送
           </el-button>
@@ -960,7 +1125,7 @@ async function confirmDeleteThread(thread: SmsThread) {
 
     <PhoneContactsDrawer
       v-model="showContactsPicker"
-      :device-id="selectedSendDeviceId"
+      :device-id="contactsDeviceId"
       kind="sms"
       @select="applyContactNumber"
     />
@@ -1008,6 +1173,16 @@ async function confirmDeleteThread(thread: SmsThread) {
   margin: 0;
 }
 
+.sms-modal-route-state {
+  margin: -2px 0 14px;
+  padding: 10px 12px;
+  border: 1px solid color-mix(in srgb, var(--ui-warning) 36%, var(--ui-border));
+  border-radius: var(--ui-radius-md);
+  background: color-mix(in srgb, var(--ui-warning) 9%, var(--ui-surface));
+  color: var(--ui-text);
+  font-size: 13px;
+}
+
 .sms-workspace {
   min-height: 0;
   animation: sms-workspace-enter 220ms var(--ui-ease-out) both;
@@ -1025,6 +1200,43 @@ async function confirmDeleteThread(thread: SmsThread) {
   overflow: hidden;
   background: transparent;
 }
+
+.sms-send-route {
+  padding: 9px 14px;
+  display: grid;
+  gap: 7px;
+  border-top: 1px solid var(--ui-border);
+  background: color-mix(in srgb, var(--ui-surface) 92%, var(--ui-primary) 8%);
+}
+
+.sms-send-mode,
+.sms-route-controls {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.sms-send-mode > span {
+  color: var(--ui-text-muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.sms-route-controls :deep(.el-select) {
+  width: min(290px, 50%);
+}
+
+.sms-diagnostic-controls p,
+.sms-route-reason,
+.sms-route-ready {
+  margin: 0;
+  color: var(--ui-text-muted);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.sms-route-reason { color: var(--ui-warning); font-weight: 650; }
+.sms-route-ready { color: var(--ui-success); }
 
 .sms-workspace :deep(.sms-device-rail),
 .sms-workspace :deep(.sms-thread-list),
@@ -1109,6 +1321,10 @@ async function confirmDeleteThread(thread: SmsThread) {
   .sms-main-layout {
     grid-template-columns: 218px 310px minmax(0, 1fr);
   }
+
+  .sms-main-layout.is-member {
+    grid-template-columns: 330px minmax(0, 1fr);
+  }
 }
 
 @container (max-width: 979px) {
@@ -1169,6 +1385,14 @@ async function confirmDeleteThread(thread: SmsThread) {
     left: 6px;
     max-height: 62dvh;
   }
+
+  .sms-send-route { padding: 8px 9px; }
+  .sms-send-mode,
+  .sms-route-controls { align-items: stretch; flex-direction: column; gap: 6px; }
+  .sms-send-mode :deep(.el-radio-group) { width: 100%; display: flex; }
+  .sms-send-mode :deep(.el-radio-button) { flex: 1; }
+  .sms-send-mode :deep(.el-radio-button__inner) { width: 100%; }
+  .sms-route-controls :deep(.el-select) { width: 100%; }
 }
 
 /* 消息详情区域原生滚动条样式 */

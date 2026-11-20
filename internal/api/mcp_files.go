@@ -56,7 +56,11 @@ func (s *Server) mcpImportContacts(ctx context.Context, raw json.RawMessage, _ m
 	if len(data) > maxContactImportBytes {
 		return mcpserver.Result{}, errors.New("导入文件不能超过 8MB")
 	}
-	result, err := s.importContactContent(ctx, contactImportInput{Name: input.Filename, DeviceID: input.DeviceID, Data: data})
+	ownerID, err := s.legacyPhoneContactOwnerID(ctx)
+	if err != nil {
+		return mcpserver.Result{}, err
+	}
+	result, err := s.importContactContent(ctx, contactImportInput{OwnerID: ownerID, Name: input.Filename, DeviceID: input.DeviceID, Data: data})
 	if err != nil {
 		var failure *contactImportFailure
 		if errors.As(err, &failure) {

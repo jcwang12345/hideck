@@ -9,7 +9,13 @@ import (
 	"github.com/iniwex5/vowifi-go/runtimehost/voicehost"
 )
 
-var ErrActiveCallHistoryDelete = errors.New("正在进行的通话记录不能删除")
+var (
+	ErrActiveCallHistoryDelete = errors.New("正在进行的通话记录不能删除")
+	ErrAccessDenied            = errors.New("phone: access denied")
+	ErrAccessScopeRequired     = errors.New("phone: authenticated user scope is required")
+	ErrScopedStoreUnavailable  = errors.New("phone: scoped record store unavailable")
+	ErrRecordingNotFound       = errors.New("phone: recording not found")
+)
 
 const (
 	StatusCalling   = "calling"
@@ -19,6 +25,7 @@ const (
 	StatusCompleted = "completed"
 	StatusMissed    = "missed"
 	StatusRejected  = "rejected"
+	StatusDeclined  = "declined"
 	StatusBusy      = "busy"
 	StatusFailed    = "failed"
 )
@@ -45,6 +52,13 @@ type RecordStore interface {
 	List(context.Context, int) ([]CallRecord, error)
 	Delete(context.Context, []uint64) ([]CallRecord, error)
 	AbandonIncomplete(ctx context.Context, endedAt time.Time, reason string) error
+}
+
+// AccessScope is supplied by an authenticated transport. UserID is the stable
+// application user ID, never a display name or request-supplied value.
+type AccessScope struct {
+	UserID        string
+	Administrator bool
 }
 
 type AudioTranscoder interface {
@@ -111,6 +125,7 @@ type ServiceOptions struct {
 	RecoveryGrace    time.Duration
 	ResolveICCID     func(string) string
 	AutoAnswer       AutoAnswerConfig
+	OnTerminal       func(CallRecord)
 }
 
 type CallRecord struct {
@@ -118,6 +133,14 @@ type CallRecord struct {
 	CallID          string     `json:"call_id"`
 	DeviceID        string     `json:"device_id"`
 	ICCID           string     `json:"iccid,omitempty"`
+	UserID          string     `json:"user_id,omitempty"`
+	PoolID          string     `json:"pool_id,omitempty"`
+	CardID          string     `json:"card_id,omitempty"`
+	ProfileID       string     `json:"profile_id,omitempty"`
+	NumberID        string     `json:"number_id,omitempty"`
+	SourceNumber    string     `json:"source_number,omitempty"`
+	RequestID       string     `json:"request_id,omitempty"`
+	ResourceLeaseID string     `json:"resource_lease_id,omitempty"`
 	Direction       string     `json:"direction"`
 	Peer            string     `json:"peer"`
 	Status          string     `json:"status"`
@@ -126,6 +149,10 @@ type CallRecord struct {
 	EndedAt         *time.Time `json:"ended_at,omitempty"`
 	DurationSeconds int64      `json:"duration_seconds"`
 	EndReason       string     `json:"end_reason,omitempty"`
+	OutcomeKind     string     `json:"outcome_kind,omitempty"`
+	SIPCode         int        `json:"sip_code,omitempty"`
+	SIPReason       string     `json:"sip_reason,omitempty"`
+	Terminator      string     `json:"terminator,omitempty"`
 	Codec           string     `json:"codec,omitempty"`
 	RecordingName   string     `json:"recording_name,omitempty"`
 	PCAPName        string     `json:"pcap_name,omitempty"`
@@ -135,6 +162,10 @@ type CallRecord struct {
 type CallView struct {
 	CallID         string     `json:"call_id"`
 	DeviceID       string     `json:"device_id"`
+	UserID         string     `json:"user_id,omitempty"`
+	PoolID         string     `json:"pool_id,omitempty"`
+	SourceNumber   string     `json:"source_number,omitempty"`
+	RequestID      string     `json:"request_id,omitempty"`
 	Direction      string     `json:"direction"`
 	Peer           string     `json:"peer"`
 	Status         string     `json:"status"`
@@ -143,6 +174,10 @@ type CallView struct {
 	AnsweredAt     *time.Time `json:"answered_at,omitempty"`
 	EndedAt        *time.Time `json:"ended_at,omitempty"`
 	EndReason      string     `json:"end_reason,omitempty"`
+	OutcomeKind    string     `json:"outcome_kind,omitempty"`
+	SIPCode        int        `json:"sip_code,omitempty"`
+	SIPReason      string     `json:"sip_reason,omitempty"`
+	Terminator     string     `json:"terminator,omitempty"`
 	Codec          string     `json:"codec,omitempty"`
 	RecordingError string     `json:"recording_error,omitempty"`
 	ReadOnly       bool       `json:"read_only"`
@@ -150,11 +185,18 @@ type CallView struct {
 }
 
 type StartCallRequest struct {
-	Owner    string
-	DeviceID string
-	Callee   string
-	MediaID  string
-	Lease    string
+	Owner           string
+	DeviceID        string
+	Callee          string
+	MediaID         string
+	Lease           string
+	PoolID          string
+	CardID          string
+	ProfileID       string
+	NumberID        string
+	SourceNumber    string
+	RequestID       string
+	ResourceLeaseID string
 }
 
 type ControlRequest struct {

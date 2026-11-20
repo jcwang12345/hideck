@@ -505,6 +505,7 @@ func (a *Agent) finishLocalHangup(call *Call) error {
 	if !call.claimTerminalFinalization() {
 		return nil
 	}
+	call.setTerminalOutcome("local_canceled", 0, "", "local")
 	a.emitCallEnded(call, "local_hangup")
 	return a.finalizeActiveCall(call)
 }
@@ -513,6 +514,7 @@ func (a *Agent) finishLocalCancel(call *Call, reason string) error {
 	if call == nil || !call.claimTerminalFinalization() {
 		return nil
 	}
+	call.setTerminalOutcome("local_canceled", 0, "", "local")
 	a.emitCallCanceled(call, reason)
 	return a.finalizeActiveCall(call)
 }
@@ -526,6 +528,7 @@ func (a *Agent) failOutboundCall(call *Call, cause error) error {
 	if cause == nil {
 		cause = errors.New("voice: outbound call failed without cause")
 	}
+	call.setTerminalOutcomeIfEmpty("failed", 0, "", "network")
 	a.emitCallFailed(call, cause.Error())
 	cause = errors.Join(cause, a.finalizeActiveCall(call))
 	return cause
@@ -727,9 +730,12 @@ func (a *Agent) emitCallEnded(c *Call, reason string) {
 		return
 	}
 	endedAt := time.Now()
+	outcome := c.terminalOutcomeSnapshot()
 	a.emit(events.EventCallEnded{
 		DevID: a.deviceID, CallID: c.CallID(), Reason: strings.TrimSpace(reason),
-		EndedAt: endedAt, Time: endedAt,
+		OutcomeKind: outcome.Kind, SIPCode: outcome.SIPCode, SIPReason: outcome.SIPReason,
+		Terminator: outcome.Terminator,
+		EndedAt:    endedAt, Time: endedAt,
 	})
 }
 
@@ -738,7 +744,12 @@ func (a *Agent) emitCallFailed(c *Call, reason string) {
 	if a == nil || c == nil {
 		return
 	}
-	a.emit(&events.EventCallFailed{DevID: a.deviceID, CallID: c.CallID(), Reason: reason, Time: time.Now()})
+	outcome := c.terminalOutcomeSnapshot()
+	a.emit(&events.EventCallFailed{
+		DevID: a.deviceID, CallID: c.CallID(), Reason: reason,
+		OutcomeKind: outcome.Kind, SIPCode: outcome.SIPCode, SIPReason: outcome.SIPReason,
+		Terminator: outcome.Terminator, Time: time.Now(),
+	})
 }
 
 // emitCallCanceled publishes the CallCanceled event.
@@ -746,8 +757,11 @@ func (a *Agent) emitCallCanceled(c *Call, reason string) {
 	if a == nil || c == nil {
 		return
 	}
+	outcome := c.terminalOutcomeSnapshot()
 	a.emit(events.EventCallCanceled{
-		DevID: a.deviceID, CallID: c.CallID(), Reason: strings.TrimSpace(reason), Time: time.Now(),
+		DevID: a.deviceID, CallID: c.CallID(), Reason: strings.TrimSpace(reason),
+		OutcomeKind: outcome.Kind, SIPCode: outcome.SIPCode, SIPReason: outcome.SIPReason,
+		Terminator: outcome.Terminator, Time: time.Now(),
 	})
 }
 

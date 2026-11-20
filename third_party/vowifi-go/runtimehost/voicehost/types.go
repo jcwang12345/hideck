@@ -80,6 +80,10 @@ type CallEvent struct {
 	Caller         string    `json:"caller,omitempty"`
 	Callee         string    `json:"callee,omitempty"`
 	Reason         string    `json:"reason,omitempty"`
+	OutcomeKind    string    `json:"outcome_kind,omitempty"`
+	SIPCode        int       `json:"sip_code,omitempty"`
+	SIPReason      string    `json:"sip_reason,omitempty"`
+	Terminator     string    `json:"terminator,omitempty"`
 	Direction      string    `json:"direction,omitempty"`
 	State          string    `json:"state,omitempty"`
 	PCAPPath       string    `json:"pcap_path,omitempty"`

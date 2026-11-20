@@ -3,8 +3,8 @@ package e911
 import (
 	"strings"
 
-	"github.com/yibaiba/hideck/internal/modem"
 	"github.com/iniwex5/vowifi-go/runtimehost/carrier"
+	"github.com/yibaiba/hideck/internal/modem"
 )
 
 func SetupAvailable(status modem.DeviceStatus) bool {

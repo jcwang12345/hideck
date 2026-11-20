@@ -26,6 +26,9 @@ func TestLegacySameNameContactsReceiveIndependentIDs(t *testing.T) {
 	).Error; err != nil {
 		t.Fatal(err)
 	}
+	if err := MigratePhoneContactOwners(database); err != nil {
+		t.Fatal(err)
+	}
 	if err := database.AutoMigrate(&PhoneContact{}); err != nil {
 		t.Fatal(err)
 	}

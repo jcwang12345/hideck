@@ -725,11 +725,11 @@ func TestBuildIMSByeUsesLearnedContactAndRecordRoute(t *testing.T) {
 	call := NewCall(agent, callstate.DirectionOutbound, "bye-dialog", "+447700900001")
 	call.setVoiceDialog(&voiceSIPDialog{
 		localURI: "sip:local@ims.example", remoteURI: "sip:+447700900001@ims.example;user=phone",
-		remoteTarget: "sip:+447700900001@ims.example;user=phone",
+		remoteTarget:  "sip:+447700900001@ims.example;user=phone",
 		contactHeader: "<sip:local@192.0.2.10:48554;ob>",
-		localAddress: "192.0.2.10:50309", transport: "tcp",
+		localAddress:  "192.0.2.10:50309", transport: "tcp",
 		serviceRoute: []string{"<sip:orig@scscf.ims.example;lr>"},
-		localTag: "local-tag", cseq: 1, inviteCSeq: 1,
+		localTag:     "local-tag", cseq: 1, inviteCSeq: 1,
 	})
 	call.learnVoiceDialog(imscore.SIPResponse{
 		Headers: map[string]string{

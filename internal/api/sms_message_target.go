@@ -15,12 +15,16 @@ func (s *Server) handleSMSMessageTarget(c *gin.Context) {
 }
 
 func (s *Server) useSMSMessageTarget(c businessContext) {
+	access, ok := s.smsAccess(c)
+	if !ok {
+		return
+	}
 	id, err := strconv.ParseUint(c.Param("id"), 10, smsNotificationCursorBits)
 	if err != nil || id == 0 || uint64(uint(id)) != id {
 		c.JSON(http.StatusBadRequest, gin.H{"message": "短信 ID 必须是有效的正整数"})
 		return
 	}
-	result, err := db.GetSMSMessageTarget(businessRequestContext(c), uint(id))
+	result, err := db.GetSMSMessageTargetScoped(businessRequestContext(c), access.scope, uint(id))
 	if errors.Is(err, db.ErrSMSNotFound) {
 		c.JSON(http.StatusNotFound, gin.H{"message": "目标短信或会话已不存在，可能已被删除"})
 		return

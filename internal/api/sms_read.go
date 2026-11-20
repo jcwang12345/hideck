@@ -40,6 +40,10 @@ func (s *Server) useMarkSMSThreadRead(c businessContext) {
 		return
 	}
 	defer releaseOperation()
+	access, ok := s.smsAccess(c)
+	if !ok {
+		return
+	}
 
 	iccid := db.CanonicalICCID(c.Query("iccid"))
 	if iccid == "" {
@@ -59,9 +63,9 @@ func (s *Server) useMarkSMSThreadRead(c businessContext) {
 	var result db.SMSReadResult
 	var err error
 	if request.MessageIDs != nil {
-		result, err = db.MarkSMSMessagesReadByICCID(iccid, peer, request.MessageIDs)
+		result, err = db.MarkSMSMessagesReadByICCIDScoped(access.scope, iccid, peer, request.MessageIDs)
 	} else {
-		result, err = db.MarkSMSThreadReadByICCID(iccid, peer, request.ThroughID)
+		result, err = db.MarkSMSThreadReadByICCIDScoped(access.scope, iccid, peer, request.ThroughID)
 	}
 	if err != nil {
 		if errors.Is(err, db.ErrSMSReadBoundaryInvalid) {

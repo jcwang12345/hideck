@@ -165,10 +165,14 @@ type EventCallAnswered struct {
 
 // EventCallEnded is published when a call ends.
 type EventCallEnded struct {
-	DevID   string
-	CallID  string
-	Reason  string
-	EndedAt time.Time
+	DevID       string
+	CallID      string
+	Reason      string
+	EndedAt     time.Time
+	OutcomeKind string
+	SIPCode     int
+	SIPReason   string
+	Terminator  string
 
 	// Time preserves the current projection; EndedAt is the original field.
 	Time time.Time
@@ -176,18 +180,26 @@ type EventCallEnded struct {
 
 // EventCallFailed is published when a call fails.
 type EventCallFailed struct {
-	DevID  string
-	CallID string
-	Reason string
-	Time   time.Time
+	DevID       string
+	CallID      string
+	Reason      string
+	Time        time.Time
+	OutcomeKind string
+	SIPCode     int
+	SIPReason   string
+	Terminator  string
 }
 
 // EventCallCanceled is published when a call is canceled.
 type EventCallCanceled struct {
-	DevID  string
-	CallID string
-	Reason string
-	Time   time.Time
+	DevID       string
+	CallID      string
+	Reason      string
+	Time        time.Time
+	OutcomeKind string
+	SIPCode     int
+	SIPReason   string
+	Terminator  string
 }
 
 // EventCallMediaUpdated is published when call media is updated.

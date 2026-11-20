@@ -9,8 +9,8 @@ import (
 )
 
 type contactImportInput struct {
-	Name, DeviceID string
-	Data           []byte
+	OwnerID, Name, DeviceID string
+	Data                    []byte
 }
 type contactImportFailure struct {
 	Code   string
@@ -33,7 +33,7 @@ func (s *Server) importContactContent(ctx context.Context, input contactImportIn
 	for _, item := range parsed {
 		inputs = append(inputs, db.PhoneContactInput{Number: item.Number, Name: item.Name, Region: region, GroupKey: item.ContactID})
 	}
-	imported, skipped, err := db.UpsertPhoneContactsWithRegion(ctx, inputs, region)
+	imported, skipped, err := db.UpsertPhoneContactsForOwnerWithRegion(ctx, input.OwnerID, inputs, region)
 	if err != nil {
 		return nil, &contactImportFailure{Code: "contact_import_failed", Status: 500, Err: err}
 	}

@@ -14,13 +14,17 @@ import (
 const smsEventHeartbeatInterval = 15 * time.Second
 
 func (s *Server) handleSMSEvents(c *gin.Context) {
+	access, ok := s.smsAccess(c)
+	if !ok {
+		return
+	}
 	afterID, ok := parseSMSEventAfterID(c)
 	if !ok {
 		return
 	}
-	stream, cancel := db.SubscribeIncomingSMS()
+	stream, cancel := db.SubscribeIncomingSMSScoped(access.scope)
 	defer cancel()
-	replay, err := loadSMSReplay(c.Request.Context(), afterID)
+	replay, err := loadSMSReplayScoped(c.Request.Context(), access.scope, afterID)
 	if err != nil {
 		slog.Error("查询短信事件补发失败", "err", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"message": "短信事件查询失败，请稍后重试"})

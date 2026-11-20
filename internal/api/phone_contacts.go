@@ -42,13 +42,17 @@ func (s *Server) handlePhoneLookup(c *gin.Context) {
 }
 
 func (s *Server) usePhoneLookup(c businessContext) {
+	ownerID, ok := s.phoneContactOwnerID(c)
+	if !ok {
+		return
+	}
 	number := strings.TrimSpace(c.Query("number"))
 	if number == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"status": "error", "code": "missing_number", "message": "缺少号码"})
 		return
 	}
 	region := s.phoneNumberRegion(c.Query("device_id"))
-	c.JSON(http.StatusOK, db.LookupPhoneIdentityWithRegion(businessRequestContext(c), number, region))
+	c.JSON(http.StatusOK, db.LookupPhoneIdentityForOwnerWithRegion(businessRequestContext(c), ownerID, number, region))
 }
 
 func (s *Server) handlePhoneContactsList(c *gin.Context) {
@@ -56,12 +60,16 @@ func (s *Server) handlePhoneContactsList(c *gin.Context) {
 }
 
 func (s *Server) usePhoneContactsList(c businessContext) {
+	ownerID, ok := s.phoneContactOwnerID(c)
+	if !ok {
+		return
+	}
 	page, err := contactPageParams(c)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"status": "error", "code": "invalid_pagination", "message": err.Error()})
 		return
 	}
-	rows, total, err := loadPhoneContacts(c, page)
+	rows, total, err := loadPhoneContacts(c, ownerID, page)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"status": "error", "code": "contacts_list_failed", "message": err.Error()})
 		return
@@ -95,16 +103,16 @@ func contactPageParams(c businessContext) (contactPageRequest, error) {
 	return contactPageRequest{Limit: limit, Offset: offset, Paginated: true}, nil
 }
 
-func loadPhoneContacts(c businessContext, page contactPageRequest) ([]db.PhoneContact, int64, error) {
+func loadPhoneContacts(c businessContext, ownerID string, page contactPageRequest) ([]db.PhoneContact, int64, error) {
 	if !page.Paginated {
-		rows, err := db.ListPhoneContacts(businessRequestContext(c))
+		rows, err := db.ListPhoneContactsForOwner(businessRequestContext(c), ownerID)
 		return rows, int64(len(rows)), err
 	}
-	total, err := db.CountPhoneContacts(businessRequestContext(c))
+	total, err := db.CountPhoneContactsForOwner(businessRequestContext(c), ownerID)
 	if err != nil {
 		return nil, 0, err
 	}
-	rows, err := db.ListPhoneContactsPage(businessRequestContext(c), page.Limit, page.Offset)
+	rows, err := db.ListPhoneContactsPageForOwner(businessRequestContext(c), ownerID, page.Limit, page.Offset)
 	return rows, total, err
 }
 
@@ -126,6 +134,10 @@ func (s *Server) usePhoneContactsUpsert(c businessContext) {
 		return
 	}
 	defer releaseOperation()
+	ownerID, ok := s.phoneContactOwnerID(c)
+	if !ok {
+		return
+	}
 
 	var req phoneContactRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -133,7 +145,7 @@ func (s *Server) usePhoneContactsUpsert(c businessContext) {
 		return
 	}
 	region := s.phoneNumberRegion(req.DeviceID)
-	row, err := db.UpsertPhoneContactWithRegion(businessRequestContext(c), db.PhoneContactInput{
+	row, err := db.UpsertPhoneContactForOwnerWithRegion(businessRequestContext(c), ownerID, db.PhoneContactInput{
 		Number: req.Number, Name: req.Name, Region: region, ContactID: req.ContactID,
 	})
 	if err != nil {
@@ -146,7 +158,7 @@ func (s *Server) usePhoneContactsUpsert(c businessContext) {
 		c.JSON(status, gin.H{"status": "error", "code": "contact_save_failed", "message": "保存联系人失败"})
 		return
 	}
-	c.JSON(http.StatusOK, db.LookupPhoneIdentity(businessRequestContext(c), row.Number))
+	c.JSON(http.StatusOK, db.LookupPhoneIdentityForOwner(businessRequestContext(c), ownerID, row.Number))
 }
 
 func (s *Server) handlePhoneContactsDelete(c *gin.Context) {
@@ -159,6 +171,10 @@ func (s *Server) usePhoneContactsDelete(c businessContext) {
 		return
 	}
 	defer releaseOperation()
+	ownerID, ok := s.phoneContactOwnerID(c)
+	if !ok {
+		return
+	}
 
 	number := strings.TrimSpace(c.Query("number"))
 	if number == "" {
@@ -166,7 +182,7 @@ func (s *Server) usePhoneContactsDelete(c businessContext) {
 		return
 	}
 	region := s.phoneNumberRegion(c.Query("device_id"))
-	if err := db.DeletePhoneContactWithRegion(businessRequestContext(c), number, region); err != nil {
+	if err := db.DeletePhoneContactForOwnerWithRegion(businessRequestContext(c), ownerID, number, region); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"status": "error", "code": "contact_delete_failed", "message": err.Error()})
 		return
 	}
@@ -203,13 +219,17 @@ func (s *Server) usePhoneContactsBatchDelete(c businessContext) {
 		return
 	}
 	defer releaseOperation()
+	ownerID, ok := s.phoneContactOwnerID(c)
+	if !ok {
+		return
+	}
 
 	var req phoneContactDeleteRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"status": "error", "code": "invalid_json", "message": "请求格式不正确"})
 		return
 	}
-	deleted, err := db.DeletePhoneContactsWithRegion(businessRequestContext(c), req.Numbers, s.phoneNumberRegion(req.DeviceID))
+	deleted, err := db.DeletePhoneContactsForOwnerWithRegion(businessRequestContext(c), ownerID, req.Numbers, s.phoneNumberRegion(req.DeviceID))
 	if err != nil {
 		status := http.StatusInternalServerError
 		if errors.Is(err, db.ErrInvalidPhoneContact) {
@@ -226,7 +246,11 @@ func (s *Server) handlePhoneContactsExport(c *gin.Context) {
 }
 
 func (s *Server) usePhoneContactsExport(c businessContext) {
-	rows, err := db.ListPhoneContacts(businessRequestContext(c))
+	ownerID, ok := s.phoneContactOwnerID(c)
+	if !ok {
+		return
+	}
+	rows, err := db.ListPhoneContactsForOwner(businessRequestContext(c), ownerID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"status": "error", "code": "contacts_export_failed", "message": err.Error()})
 		return
@@ -247,6 +271,10 @@ func (s *Server) usePhoneContactsExport(c businessContext) {
 }
 
 func (s *Server) handlePhoneContactsImport(c *gin.Context) {
+	ownerID, ok := s.phoneContactOwnerID(c)
+	if !ok {
+		return
+	}
 	file, err := c.FormFile("file")
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"status": "error", "code": "missing_file", "message": "请选择要导入的联系人文件"})
@@ -267,7 +295,7 @@ func (s *Server) handlePhoneContactsImport(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"status": "error", "code": "read_file_failed", "message": "无法读取导入文件"})
 		return
 	}
-	result, err := s.importContactContent(c.Request.Context(), contactImportInput{Name: file.Filename, DeviceID: c.PostForm("device_id"), Data: data})
+	result, err := s.importContactContent(c.Request.Context(), contactImportInput{OwnerID: ownerID, Name: file.Filename, DeviceID: c.PostForm("device_id"), Data: data})
 	if err != nil {
 		var failure *contactImportFailure
 		if errors.As(err, &failure) {

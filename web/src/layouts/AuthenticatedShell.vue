@@ -12,6 +12,7 @@ import { nextLocale } from '../utils/locale'
 import PhoneCallBar from '../components/PhoneCallBar.vue'
 import SmsNotificationCenter from '../components/sms/SmsNotificationCenter.vue'
 import { debugCollector } from '../debug/collector'
+import { canAccess } from '../utils/accessControl'
 import {
   Mail24Regular,
   Settings24Regular,
@@ -23,7 +24,12 @@ import {
   Chat24Regular,
   CalendarClock24Regular,
   Dialpad24Regular,
-  GridDots24Regular
+  GridDots24Regular,
+  Sim24Regular,
+  NumberSymbol24Regular,
+  People24Regular,
+  ShieldTask24Regular,
+  ContactCard24Regular
 } from '@vicons/fluent'
 
 defineProps({
@@ -53,17 +59,32 @@ const localeMark = computed(() => (locale.value === 'en' ? '中' : 'EN'))
 function toggleLocale() {
   setLocale(nextLocale(locale.value))
 }
-const menuItems = computed(() => [
-  { index: '/', label: t('nav.dashboard'), icon: Board24Regular },
-  { index: '/devices', label: t('nav.devices'), icon: Phone24Regular },
+type MenuItem = {
+  index: string
+  label: string
+  icon: Component
+  roles?: string[]
+  permissions?: string[]
+}
+
+const allMenuItems = computed<MenuItem[]>(() => [
+  { index: '/', label: t('nav.dashboard'), icon: Board24Regular, roles: ['admin'] },
+  { index: '/devices', label: t('nav.devices'), icon: Phone24Regular, roles: ['admin'] },
+  { index: '/cards', label: t('nav.cards'), icon: Sim24Regular, roles: ['admin'] },
+  { index: '/number-pools', label: t('nav.numberPools'), icon: NumberSymbol24Regular, roles: ['admin'] },
   { index: '/phone', label: t('nav.phone'), icon: Dialpad24Regular },
-  { index: '/proxy', label: t('nav.proxy'), icon: Globe24Regular },
+  { index: '/call-records', label: t('nav.callRecords'), icon: ContactCard24Regular },
+  { index: '/dispatch-policies', label: t('nav.dispatchPolicies'), icon: CalendarClock24Regular, roles: ['admin'] },
+  { index: '/users', label: t('nav.users'), icon: People24Regular, roles: ['admin'] },
   { index: '/sms', label: t('nav.sms'), icon: Mail24Regular },
-  { index: '/commands', label: t('nav.commands'), icon: Chat24Regular },
-  { index: '/automatic-tasks', label: t('nav.tasks'), icon: CalendarClock24Regular },
-  { index: '/logs', label: t('nav.logs'), icon: DocumentText24Regular },
-  { index: '/settings', label: t('nav.settings'), icon: Settings24Regular }
+  { index: '/proxy', label: t('nav.proxy'), icon: Globe24Regular, roles: ['admin'] },
+  { index: '/commands', label: t('nav.commands'), icon: Chat24Regular, roles: ['admin'] },
+  { index: '/automatic-tasks', label: t('nav.tasks'), icon: CalendarClock24Regular, roles: ['admin'] },
+  { index: '/audit-log', label: t('nav.auditLog'), icon: ShieldTask24Regular, roles: ['admin'] },
+  { index: '/logs', label: t('nav.logs'), icon: DocumentText24Regular, roles: ['admin'] },
+  { index: '/settings', label: t('nav.settings'), icon: Settings24Regular, roles: ['admin'] }
 ])
+const menuItems = computed(() => allMenuItems.value.filter(item => canAccess(auth.user, item)))
 type MobileMenuItem = {
   index: string
   label: string
@@ -72,16 +93,21 @@ type MobileMenuItem = {
   drawer?: boolean
 }
 
-const mobileMenuItems = computed<MobileMenuItem[]>(() => [
+const mobileMenuItems = computed<MobileMenuItem[]>(() => auth.isAdmin ? [
   { index: '/', label: t('nav.dashboard'), icon: Board24Regular },
-  { index: '/devices', label: locale.value === 'en' ? 'Devices' : '设备', icon: Phone24Regular },
-  { index: '/phone', label: locale.value === 'en' ? 'Dial' : '拨号', icon: Dialpad24Regular, prominent: true },
-  { index: '/sms', label: locale.value === 'en' ? 'SMS' : '短信', icon: Mail24Regular },
-  { index: '__more__', label: locale.value === 'en' ? 'More' : '更多', icon: GridDots24Regular, drawer: true }
+  { index: '/devices', label: t('nav.devicesShort'), icon: Phone24Regular },
+  { index: '/phone', label: t('nav.dial'), icon: Dialpad24Regular, prominent: true },
+  { index: '/sms', label: t('nav.sms'), icon: Mail24Regular },
+  { index: '__more__', label: t('nav.more'), icon: GridDots24Regular, drawer: true }
+] : [
+  { index: '/call-records', label: t('nav.callRecordsShort'), icon: ContactCard24Regular },
+  { index: '/phone', label: t('nav.dial'), icon: Dialpad24Regular, prominent: true },
+  { index: '/sms', label: t('nav.sms'), icon: Mail24Regular },
+  { index: '__more__', label: t('nav.more'), icon: GridDots24Regular, drawer: true }
 ])
 const effectiveCollapsed = computed(() => collapsed.value || viewportCompact.value)
 const expandedSidebarWidth = computed(() => viewportNarrow.value ? '184px' : '208px')
-const primaryMobilePaths = ['/', '/devices', '/phone', '/sms']
+const primaryMobilePaths = computed(() => mobileMenuItems.value.filter(item => !item.drawer).map(item => item.index))
 
 async function handleLogout() {
   const { ElMessageBox } = await import('element-plus')
@@ -93,8 +119,8 @@ async function handleLogout() {
     .then(() => true)
     .catch(() => false)
   if (!confirmed) return
-  auth.logout()
-  router.push('/login')
+  await auth.logout()
+  await router.push('/login')
 }
 
 function syncIsMobile() {
@@ -125,7 +151,7 @@ function handleMobileNav(item: MobileMenuItem) {
 }
 
 function mobileItemActive(item: MobileMenuItem) {
-  return item.drawer ? !primaryMobilePaths.includes(activePath.value) : activePath.value === item.index
+  return item.drawer ? !primaryMobilePaths.value.includes(activePath.value) : activePath.value === item.index
 }
 
 function onKeydown(e: KeyboardEvent) {
@@ -144,7 +170,7 @@ onMounted(() => {
   debugOpen.value = saved === '1'
 
   window.addEventListener('keydown', onKeydown)
-  void phone.initialize()
+  void phone.initialize({ includeDevices: auth.isAdmin })
 })
 
 onUnmounted(() => {
@@ -177,6 +203,7 @@ watch(
 
 const activePath = computed(() => route.path)
 const activeMenuItem = computed(() => menuItems.value.find((item) => item.index === route.path) || menuItems.value[0])
+const roleLabel = computed(() => auth.isAdmin ? t('nav.administrator') : t('nav.member'))
 </script>
 
 <template>
@@ -225,8 +252,8 @@ const activeMenuItem = computed(() => menuItems.value.find((item) => item.index 
             <span class="sidebar-locale-mark">{{ localeMark }}</span>
           </button>
           <div class="flex-1 min-w-0">
-            <div class="text-sm font-semibold truncate text-[var(--ui-nav-text)]">{{ t('nav.admin') }}</div>
-            <div class="text-xs truncate sidebar-account-role">{{ t('nav.administrator') }}</div>
+            <div class="text-sm font-semibold truncate text-[var(--ui-nav-text)]">{{ auth.displayName }}</div>
+            <div class="text-xs truncate sidebar-account-role">{{ roleLabel }}</div>
           </div>
           <el-button text type="danger" :aria-label="t('nav.logout')" @click="handleLogout">
             <el-icon><SignOut24Regular /></el-icon>
@@ -264,8 +291,8 @@ const activeMenuItem = computed(() => menuItems.value.find((item) => item.index 
               <span class="sidebar-locale-mark">{{ localeMark }}</span>
             </button>
             <div class="flex-1 min-w-0">
-              <div class="text-sm font-semibold truncate text-[var(--ui-nav-text)]">{{ t('nav.admin') }}</div>
-              <div class="text-xs truncate sidebar-account-role">{{ t('nav.administrator') }}</div>
+              <div class="text-sm font-semibold truncate text-[var(--ui-nav-text)]">{{ auth.displayName }}</div>
+              <div class="text-xs truncate sidebar-account-role">{{ roleLabel }}</div>
             </div>
             <el-button text type="danger" @click="handleLogout">
               <el-icon><SignOut24Regular /></el-icon>
@@ -286,7 +313,7 @@ const activeMenuItem = computed(() => menuItems.value.find((item) => item.index 
           </el-button>
           <div class="topbar-context">
             <span class="topbar-product">HIDECK</span>
-            <strong>{{ activeMenuItem.label }}</strong>
+            <strong>{{ activeMenuItem?.label || t('nav.forbidden') }}</strong>
           </div>
         </div>
 
@@ -314,7 +341,12 @@ const activeMenuItem = computed(() => menuItems.value.find((item) => item.index 
       </el-main>
     </el-container>
 
-    <nav v-if="isMobile" class="mobile-bottom-nav" :aria-label="t('nav.mobileNav')">
+    <nav
+      v-if="isMobile"
+      class="mobile-bottom-nav"
+      :aria-label="t('nav.mobileNav')"
+      :style="{ gridTemplateColumns: `repeat(${mobileMenuItems.length}, minmax(44px, 1fr))` }"
+    >
       <button
         v-for="item in mobileMenuItems"
         :key="item.index"
@@ -364,6 +396,9 @@ const activeMenuItem = computed(() => menuItems.value.find((item) => item.index 
   --el-menu-hover-bg-color: var(--sidebar-menu-hover-bg);
   --el-menu-active-color: var(--sidebar-menu-active-color);
   --el-menu-text-color: var(--sidebar-menu-text);
+  max-height: calc(100vh - 142px);
+  overflow-y: auto;
+  scrollbar-width: thin;
 }
 
 :deep(.sidebar-menu .el-menu-item) {

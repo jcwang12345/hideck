@@ -286,6 +286,10 @@ func (s *Service) finishCall(event voicehost.CallEvent) {
 	call.terminal, call.view.Status, call.record.Status = true, status, status
 	call.view.EndedAt, call.record.EndedAt = &endedAt, &endedAt
 	call.view.EndReason, call.record.EndReason = event.Reason, event.Reason
+	call.view.OutcomeKind, call.record.OutcomeKind = event.OutcomeKind, event.OutcomeKind
+	call.view.SIPCode, call.record.SIPCode = event.SIPCode, event.SIPCode
+	call.view.SIPReason, call.record.SIPReason = event.SIPReason, event.SIPReason
+	call.view.Terminator, call.record.Terminator = event.Terminator, event.Terminator
 	call.record.DurationSeconds = callDurationSeconds(call.record, endedAt)
 	if call.disconnectTimer != nil {
 		call.disconnectTimer.Stop()
@@ -315,6 +319,7 @@ func (s *Service) finishCall(event voicehost.CallEvent) {
 	record := call.record
 	s.mu.RUnlock()
 	s.persist(record)
+	s.notifyTerminal(record)
 	s.publish("call_ended", call)
 	if s.notifier != nil {
 		go s.notifier.NotifyCallResult(deviceID, peer, direction, status, event.Reason, endedAt)
@@ -326,6 +331,12 @@ func terminalStatus(call *activeCall, event voicehost.CallEvent) string {
 		return StatusCompleted
 	}
 	if call.view.Direction != "inbound" {
+		switch strings.ToLower(strings.TrimSpace(event.OutcomeKind)) {
+		case "declined", "remote_declined":
+			return StatusDeclined
+		case "busy":
+			return StatusBusy
+		}
 		return StatusFailed
 	}
 	if call.userRejected {

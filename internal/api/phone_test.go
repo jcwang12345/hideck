@@ -33,10 +33,7 @@ func TestPhoneRoutesEnforceAuthenticationAndControlLease(t *testing.T) {
 			t.Errorf("close phone service: %v", err)
 		}
 	})
-	server := &Server{
-		auth:  config.WebConfig{Username: "admin", Password: "secret"},
-		phone: service, shutdownCh: make(chan struct{}),
-	}
+	server := newManagedPhoneRouteServer(t, service)
 	router := gin.New()
 	api := router.Group("/api")
 	api.Use(server.authMiddleware())
@@ -140,10 +137,7 @@ func TestPhoneEventStreamDisablesProxyBuffering(t *testing.T) {
 			t.Errorf("close phone service: %v", err)
 		}
 	})
-	server := &Server{
-		auth:  config.WebConfig{Username: "admin", Password: "secret"},
-		phone: service, shutdownCh: make(chan struct{}),
-	}
+	server := newManagedPhoneRouteServer(t, service)
 	router := gin.New()
 	api := router.Group("/api")
 	api.Use(server.authMiddleware())
@@ -191,10 +185,7 @@ func TestPhoneEventStreamDeliversCallEndedAfterSilentHangup(t *testing.T) {
 			t.Errorf("close phone service: %v", err)
 		}
 	})
-	server := &Server{
-		auth:  config.WebConfig{Username: "admin", Password: "secret"},
-		phone: service, shutdownCh: make(chan struct{}),
-	}
+	server := newManagedPhoneRouteServer(t, service)
 	router := gin.New()
 	api := router.Group("/api")
 	api.Use(server.authMiddleware())
@@ -399,10 +390,7 @@ func TestPhoneHoldReturnsChineseWhenNotAligned(t *testing.T) {
 			t.Errorf("close phone service: %v", err)
 		}
 	})
-	server := &Server{
-		auth:  config.WebConfig{Username: "admin", Password: "secret"},
-		phone: service, shutdownCh: make(chan struct{}),
-	}
+	server := newManagedPhoneRouteServer(t, service)
 	router := gin.New()
 	api := router.Group("/api")
 	api.Use(server.authMiddleware())
@@ -438,4 +426,15 @@ func TestPhoneHoldReturnsChineseWhenNotAligned(t *testing.T) {
 	if hangup.Code != http.StatusNoContent {
 		t.Fatalf("hangup status=%d body=%s", hangup.Code, hangup.Body.String())
 	}
+}
+
+func newManagedPhoneRouteServer(t *testing.T, service *phone.Service) *Server {
+	t.Helper()
+	server, _ := newManagedOutboundTestServerForDevice(t, "dev-1")
+	server.auth = config.WebConfig{Username: "admin", Password: "secret"}
+	server.phone = service
+	server.shutdownCh = make(chan struct{})
+	server.callRegistrationReady = func(context.Context, string) error { return nil }
+	service.SetTerminalObserver(server.handleDispatchTerminalCall)
+	return server
 }

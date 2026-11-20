@@ -22,9 +22,10 @@ var ErrCarrierWebsheetAbsent = errors.New("e911 websheet url not provided by car
 var ErrIdentityUnavailable = errors.New("identity information unavailable")
 
 type Coordinator struct {
-	DeviceID  string
-	Pool      *device.Pool
-	Websheets *websheet.Broker
+	DeviceID    string
+	OwnerUserID string
+	Pool        *device.Pool
+	Websheets   *websheet.Broker
 }
 
 func NewCoordinator(deviceID string, pool *device.Pool, websheets *websheet.Broker) *Coordinator {
@@ -116,11 +117,18 @@ func (c *Coordinator) StartWebsheet(ctx context.Context, deviceID string) (websh
 		})
 	}
 
+	return c.createOwnedWebsheet(ctx, req)
+}
+
+func (c *Coordinator) createOwnedWebsheet(ctx context.Context, req websheet.Request) (websheet.Info, error) {
+	if c == nil || c.Websheets == nil {
+		return websheet.Info{}, ErrProviderUnavailable
+	}
+	req.OwnerUserID = c.OwnerUserID
 	session, err := c.Websheets.Create(ctx, req)
 	if err != nil {
 		return websheet.Info{}, err
 	}
-
 	return session.Info(), nil
 }
 

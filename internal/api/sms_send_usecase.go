@@ -5,7 +5,9 @@ import (
 	"strings"
 	"time"
 
+	"github.com/yibaiba/hideck/internal/db"
 	"github.com/yibaiba/hideck/internal/device"
+	"github.com/yibaiba/hideck/internal/identity"
 	"github.com/yibaiba/hideck/pkg/smscodec"
 
 	"github.com/yibaiba/hideck/pkg/logger"
@@ -19,8 +21,14 @@ func (s *Server) useSendSMS(c businessContext) {
 		return
 	}
 	defer releaseOperation()
+	access, authorized := s.smsAccess(c)
+	if !authorized {
+		return
+	}
 
 	type SendSMSRequest struct {
+		PoolID   string `json:"pool_id"`
+		NumberID string `json:"number_id"`
 		DeviceID string `json:"device_id"`
 		IMSI     string `json:"imsi"`
 		ICCID    string `json:"iccid"`
@@ -40,19 +48,49 @@ func (s *Server) useSendSMS(c businessContext) {
 		c.JSON(http.StatusBadRequest, gin.H{"status": "error", "message": "短信编码参数错误: " + err.Error()})
 		return
 	}
-	worker, status, msg := s.resolveSMSSendWorker(req.DeviceID, req.IMSI, req.ICCID)
-	if status != 0 {
-		c.JSON(status, gin.H{"status": "error", "message": msg})
+	var selection smsSendSelection
+	member := access.rest && access.principal.Role != identity.RoleAdmin
+	legacySelector := strings.TrimSpace(req.DeviceID) != "" || strings.TrimSpace(req.IMSI) != "" || strings.TrimSpace(req.ICCID) != ""
+	if member && legacySelector {
+		c.JSON(http.StatusForbidden, gin.H{"status": "error", "code": "sms_device_forbidden", "message": "普通用户不能直接指定 device_id、imsi 或 iccid；请使用已授权的 pool_id"})
 		return
 	}
+	if strings.TrimSpace(req.PoolID) != "" || member {
+		if legacySelector {
+			c.JSON(http.StatusBadRequest, gin.H{"status": "error", "code": "sms_selector_conflict", "message": "pool_id 不能与 device_id、imsi 或 iccid 同时使用"})
+			return
+		}
+		var resolveErr *smsSendResolveError
+		selection, resolveErr = s.resolveAuthorizedSMSSendWorker(businessRequestContext(c), access, req.PoolID, req.NumberID)
+		if resolveErr != nil {
+			c.JSON(resolveErr.status, gin.H{"status": "error", "code": resolveErr.code, "message": resolveErr.message})
+			return
+		}
+	} else {
+		worker, status, msg := s.resolveSMSSendWorker(req.DeviceID, req.IMSI, req.ICCID)
+		if status != 0 {
+			c.JSON(status, gin.H{"status": "error", "message": msg})
+			return
+		}
+		selection.worker = worker
+	}
+	worker := selection.worker
 	deviceID := worker.ID
 	sendOpts := smscodec.SubmitOptions{Encoding: encoding}
+	leaseID, reserveErr := s.reserveSMSSend(businessRequestContext(c), access, selection)
+	if reserveErr != nil {
+		c.JSON(reserveErr.status, gin.H{"status": "error", "code": reserveErr.code, "message": reserveErr.message})
+		return
+	}
+	var sendErr error
+	defer func() { s.releaseSMSSendLease(leaseID, sendErr) }()
 
 	messageID := ""
 	partsTotal := 1
 	deliveryState := "acked"
 
 	routed, err := s.pool.SendRoutedSMS(businessRequestContext(c), worker, req.Phone, req.Message, sendOpts)
+	sendErr = err
 	if respondOutboundLimit(c, err) {
 		return
 	}
@@ -121,10 +159,16 @@ func (s *Server) useSendSMS(c businessContext) {
 		"message_id":     messageID,
 		"parts_total":    partsTotal,
 		"delivery_state": deliveryState,
+		"pool_id":        selection.poolID,
+		"number_id":      selection.numberID,
 	})
 }
 
 func (s *Server) useSMSDelivery(c businessContext) {
+	access, ok := s.smsAccess(c)
+	if !ok {
+		return
+	}
 	messageID := strings.TrimSpace(c.Param("message_id"))
 	if messageID == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"status": "error", "message": "message_id 不能为空"})
@@ -133,6 +177,15 @@ func (s *Server) useSMSDelivery(c businessContext) {
 	if s.pool == nil {
 		c.JSON(http.StatusServiceUnavailable, gin.H{"status": "error", "message": "服务未就绪"})
 		return
+	}
+	var stored *db.SMSDeliveryStatus
+	if !access.scope.Unrestricted() {
+		var storedErr error
+		stored, storedErr = db.GetSMSDeliveryStatusScoped(access.scope, messageID)
+		if storedErr != nil {
+			c.JSON(http.StatusNotFound, gin.H{"status": "error", "message": "未找到对应短信投递记录"})
+			return
+		}
 	}
 	services := s.pool.GetAllVoWiFiApps()
 	for _, svc := range services {
@@ -146,5 +199,12 @@ func (s *Server) useSMSDelivery(c businessContext) {
 		c.JSON(http.StatusOK, gin.H{"status": "ok", "delivery": status})
 		return
 	}
-	c.JSON(http.StatusNotFound, gin.H{"status": "error", "message": "未找到对应短信投递记录"})
+	if stored == nil {
+		stored, _ = db.GetSMSDeliveryStatus(messageID)
+	}
+	if stored == nil {
+		c.JSON(http.StatusNotFound, gin.H{"status": "error", "message": "未找到对应短信投递记录"})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"status": "ok", "delivery": stored})
 }

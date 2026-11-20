@@ -116,21 +116,36 @@ func applyCallProgressEvent(result *CallEvent, event events.Event) bool {
 func applyCallTerminalEvent(result *CallEvent, event events.Event) bool {
 	switch value := event.(type) {
 	case events.EventCallEnded:
-		result.CallID, result.Reason, result.Time = value.CallID, value.Reason, eventTime(value.Time, value.EndedAt)
+		applyEndedEvent(result, value)
 	case *events.EventCallEnded:
-		result.CallID, result.Reason, result.Time = value.CallID, value.Reason, eventTime(value.Time, value.EndedAt)
+		applyEndedEvent(result, *value)
 	case events.EventCallFailed:
-		result.CallID, result.Reason, result.Time = value.CallID, value.Reason, eventTime(value.Time)
+		applyFailedEvent(result, value)
 	case *events.EventCallFailed:
-		result.CallID, result.Reason, result.Time = value.CallID, value.Reason, eventTime(value.Time)
+		applyFailedEvent(result, *value)
 	case events.EventCallCanceled:
-		result.CallID, result.Reason, result.Time = value.CallID, value.Reason, eventTime(value.Time)
+		applyCanceledEvent(result, value)
 	case *events.EventCallCanceled:
-		result.CallID, result.Reason, result.Time = value.CallID, value.Reason, eventTime(value.Time)
+		applyCanceledEvent(result, *value)
 	default:
 		return false
 	}
 	return true
+}
+
+func applyEndedEvent(result *CallEvent, value events.EventCallEnded) {
+	result.CallID, result.Reason, result.Time = value.CallID, value.Reason, eventTime(value.Time, value.EndedAt)
+	result.OutcomeKind, result.SIPCode, result.SIPReason, result.Terminator = value.OutcomeKind, value.SIPCode, value.SIPReason, value.Terminator
+}
+
+func applyFailedEvent(result *CallEvent, value events.EventCallFailed) {
+	result.CallID, result.Reason, result.Time = value.CallID, value.Reason, eventTime(value.Time)
+	result.OutcomeKind, result.SIPCode, result.SIPReason, result.Terminator = value.OutcomeKind, value.SIPCode, value.SIPReason, value.Terminator
+}
+
+func applyCanceledEvent(result *CallEvent, value events.EventCallCanceled) {
+	result.CallID, result.Reason, result.Time = value.CallID, value.Reason, eventTime(value.Time)
+	result.OutcomeKind, result.SIPCode, result.SIPReason, result.Terminator = value.OutcomeKind, value.SIPCode, value.SIPReason, value.Terminator
 }
 
 func applyCallAuxiliaryEvent(result *CallEvent, event events.Event) bool {

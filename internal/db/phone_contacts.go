@@ -15,12 +15,19 @@ import (
 
 var ErrInvalidPhoneContact = errors.New("invalid phone contact")
 
-const phoneContactIDPrefix = "contact_"
-const phoneContactIDRandomBytes = 16
+const (
+	// LegacyPhoneContactOwnerID is the compatibility owner used by internal and
+	// MCP callers when the identity service has not created its first admin yet.
+	// initializeIdentity atomically moves these rows to that first admin.
+	LegacyPhoneContactOwnerID = "legacy-admin"
+	phoneContactIDPrefix      = "contact_"
+	phoneContactIDRandomBytes = 16
+)
 
 type PhoneContact struct {
-	Number    string    `gorm:"column:number;primaryKey" json:"number"`
-	ContactID string    `gorm:"column:contact_id;index" json:"contact_id"`
+	OwnerID   string    `gorm:"column:owner_id;primaryKey;type:text;not null;index:idx_phone_contacts_owner_contact,priority:1" json:"-"`
+	Number    string    `gorm:"column:number;primaryKey;type:text;not null" json:"number"`
+	ContactID string    `gorm:"column:contact_id;index:idx_phone_contacts_owner_contact,priority:2" json:"contact_id"`
 	Name      string    `gorm:"column:name;not null" json:"name"`
 	CreatedAt time.Time `gorm:"column:created_at" json:"created_at"`
 	UpdatedAt time.Time `gorm:"column:updated_at" json:"updated_at"`
@@ -36,6 +43,7 @@ type PhoneContactInput struct {
 
 type phoneContactIDRequest struct {
 	Database  *gorm.DB
+	OwnerID   string
 	Number    string
 	Requested string
 }
@@ -51,80 +59,124 @@ func NormalizePhoneContactNumberWithRegion(raw, region string) string {
 }
 
 func ListPhoneContacts(ctx context.Context) ([]PhoneContact, error) {
+	return ListPhoneContactsForOwner(ctx, legacyPhoneContactRuntimeOwner())
+}
+
+func ListPhoneContactsForOwner(ctx context.Context, ownerID string) ([]PhoneContact, error) {
 	if DB == nil {
 		return nil, gorm.ErrInvalidDB
 	}
+	ownerID, err := normalizePhoneContactOwner(ownerID)
+	if err != nil {
+		return nil, err
+	}
 	var rows []PhoneContact
-	err := phoneContactsQuery(ctx).Find(&rows).Error
+	err = phoneContactsQuery(ctx, ownerID).Find(&rows).Error
 	return rows, err
 }
 
 func ListPhoneContactsPage(ctx context.Context, limit, offset int) ([]PhoneContact, error) {
+	return ListPhoneContactsPageForOwner(ctx, legacyPhoneContactRuntimeOwner(), limit, offset)
+}
+
+func ListPhoneContactsPageForOwner(ctx context.Context, ownerID string, limit, offset int) ([]PhoneContact, error) {
 	if DB == nil {
 		return nil, gorm.ErrInvalidDB
 	}
+	ownerID, err := normalizePhoneContactOwner(ownerID)
+	if err != nil {
+		return nil, err
+	}
 	var rows []PhoneContact
-	err := phoneContactsQuery(ctx).Limit(limit).Offset(offset).Find(&rows).Error
+	err = phoneContactsQuery(ctx, ownerID).Limit(limit).Offset(offset).Find(&rows).Error
 	return rows, err
 }
 
 func CountPhoneContacts(ctx context.Context) (int64, error) {
+	return CountPhoneContactsForOwner(ctx, legacyPhoneContactRuntimeOwner())
+}
+
+func CountPhoneContactsForOwner(ctx context.Context, ownerID string) (int64, error) {
 	if DB == nil {
 		return 0, gorm.ErrInvalidDB
 	}
+	ownerID, err := normalizePhoneContactOwner(ownerID)
+	if err != nil {
+		return 0, err
+	}
 	var total int64
-	err := DB.WithContext(ctx).Model(&PhoneContact{}).Count(&total).Error
+	err = DB.WithContext(ctx).Model(&PhoneContact{}).Where("owner_id = ?", ownerID).Count(&total).Error
 	return total, err
 }
 
-func phoneContactsQuery(ctx context.Context) *gorm.DB {
-	return DB.WithContext(ctx).Order("updated_at DESC, number ASC")
+func phoneContactsQuery(ctx context.Context, ownerID string) *gorm.DB {
+	return DB.WithContext(ctx).Where("owner_id = ?", ownerID).Order("updated_at DESC, number ASC")
 }
 
 func UpsertPhoneContact(ctx context.Context, number, name string) (PhoneContact, error) {
-	return UpsertPhoneContactWithRegion(ctx, PhoneContactInput{Number: number, Name: name})
+	return UpsertPhoneContactForOwner(ctx, legacyPhoneContactRuntimeOwner(), number, name)
+}
+
+func UpsertPhoneContactForOwner(ctx context.Context, ownerID, number, name string) (PhoneContact, error) {
+	return UpsertPhoneContactForOwnerWithRegion(ctx, ownerID, PhoneContactInput{Number: number, Name: name})
 }
 
 func UpsertPhoneContactWithRegion(ctx context.Context, input PhoneContactInput) (PhoneContact, error) {
+	return UpsertPhoneContactForOwnerWithRegion(ctx, legacyPhoneContactRuntimeOwner(), input)
+}
+
+func UpsertPhoneContactForOwnerWithRegion(ctx context.Context, ownerID string, input PhoneContactInput) (PhoneContact, error) {
 	if DB == nil {
 		return PhoneContact{}, gorm.ErrInvalidDB
 	}
-	return upsertPhoneContactWithDB(ctx, DB, input)
+	return upsertPhoneContactWithDB(ctx, DB, ownerID, input)
 }
 
-func upsertPhoneContactWithDB(ctx context.Context, database *gorm.DB, input PhoneContactInput) (PhoneContact, error) {
+func upsertPhoneContactWithDB(ctx context.Context, database *gorm.DB, ownerID string, input PhoneContactInput) (PhoneContact, error) {
+	ownerID, err := normalizePhoneContactOwner(ownerID)
+	if err != nil {
+		return PhoneContact{}, err
+	}
 	number := NormalizePhoneContactNumberWithRegion(input.Number, input.Region)
 	name := strings.TrimSpace(input.Name)
 	if number == "" || name == "" {
 		return PhoneContact{}, ErrInvalidPhoneContact
 	}
 	contactID, err := resolvePhoneContactID(ctx, phoneContactIDRequest{
-		Database: database, Number: number, Requested: input.ContactID,
+		Database: database, OwnerID: ownerID, Number: number, Requested: input.ContactID,
 	})
 	if err != nil {
 		return PhoneContact{}, err
 	}
-	row := PhoneContact{Number: number, ContactID: contactID, Name: name, UpdatedAt: time.Now()}
+	row := PhoneContact{OwnerID: ownerID, Number: number, ContactID: contactID, Name: name, UpdatedAt: time.Now()}
 	err = database.WithContext(ctx).Clauses(clause.OnConflict{
-		Columns:   []clause.Column{{Name: "number"}},
+		Columns:   []clause.Column{{Name: "owner_id"}, {Name: "number"}},
 		DoUpdates: clause.AssignmentColumns([]string{"contact_id", "name", "updated_at"}),
 	}).Create(&row).Error
 	if err != nil {
 		return PhoneContact{}, err
 	}
-	if err := database.WithContext(ctx).Where("number = ?", number).First(&row).Error; err != nil {
+	if err := database.WithContext(ctx).Where("owner_id = ? AND number = ?", ownerID, number).First(&row).Error; err != nil {
 		return PhoneContact{}, err
 	}
 	return row, nil
 }
 
 func GetPhoneContact(ctx context.Context, number string) (PhoneContact, error) {
+	return GetPhoneContactForOwner(ctx, legacyPhoneContactRuntimeOwner(), number)
+}
+
+func GetPhoneContactForOwner(ctx context.Context, ownerID, number string) (PhoneContact, error) {
 	number = NormalizePhoneContactNumber(number)
 	if number == "" || DB == nil {
 		return PhoneContact{}, gorm.ErrRecordNotFound
 	}
+	ownerID, err := normalizePhoneContactOwner(ownerID)
+	if err != nil {
+		return PhoneContact{}, err
+	}
 	var row PhoneContact
-	err := DB.WithContext(ctx).Where("number = ?", number).First(&row).Error
+	err = DB.WithContext(ctx).Where("owner_id = ? AND number = ?", ownerID, number).First(&row).Error
 	return row, err
 }
 
@@ -133,13 +185,21 @@ func DeletePhoneContact(ctx context.Context, number string) error {
 }
 
 func DeletePhoneContactWithRegion(ctx context.Context, number, region string) error {
-	_, err := DeletePhoneContactsWithRegion(ctx, []string{number}, region)
+	return DeletePhoneContactForOwnerWithRegion(ctx, legacyPhoneContactRuntimeOwner(), number, region)
+}
+
+func DeletePhoneContactForOwnerWithRegion(ctx context.Context, ownerID, number, region string) error {
+	_, err := DeletePhoneContactsForOwnerWithRegion(ctx, ownerID, []string{number}, region)
 	return err
 }
 
 func UpsertPhoneContactsWithRegion(ctx context.Context, inputs []PhoneContactInput, region string) (imported, skipped int, err error) {
+	return UpsertPhoneContactsForOwnerWithRegion(ctx, legacyPhoneContactRuntimeOwner(), inputs, region)
+}
+
+func UpsertPhoneContactsForOwnerWithRegion(ctx context.Context, ownerID string, inputs []PhoneContactInput, region string) (imported, skipped int, err error) {
 	rows, skipped, err := upsertPhoneContactBatch(ctx, inputs, phoneContactBatchOptions{
-		Region: region, SkipInvalid: true,
+		OwnerID: ownerID, Region: region, SkipInvalid: true,
 	})
 	return len(rows), skipped, err
 }
@@ -149,13 +209,30 @@ func UpsertPhoneContactBatchWithRegion(
 	inputs []PhoneContactInput,
 	region string,
 ) ([]PhoneContact, error) {
-	rows, _, err := upsertPhoneContactBatch(ctx, inputs, phoneContactBatchOptions{Region: region})
+	return UpsertPhoneContactBatchForOwnerWithRegion(ctx, legacyPhoneContactRuntimeOwner(), inputs, region)
+}
+
+func UpsertPhoneContactBatchForOwnerWithRegion(
+	ctx context.Context,
+	ownerID string,
+	inputs []PhoneContactInput,
+	region string,
+) ([]PhoneContact, error) {
+	rows, _, err := upsertPhoneContactBatch(ctx, inputs, phoneContactBatchOptions{OwnerID: ownerID, Region: region})
 	return rows, err
 }
 
 func DeletePhoneContactsWithRegion(ctx context.Context, numbers []string, region string) (deleted int, err error) {
+	return DeletePhoneContactsForOwnerWithRegion(ctx, legacyPhoneContactRuntimeOwner(), numbers, region)
+}
+
+func DeletePhoneContactsForOwnerWithRegion(ctx context.Context, ownerID string, numbers []string, region string) (deleted int, err error) {
 	if DB == nil {
 		return 0, gorm.ErrInvalidDB
+	}
+	ownerID, err = normalizePhoneContactOwner(ownerID)
+	if err != nil {
+		return 0, err
 	}
 	canonical := make([]string, 0, len(numbers))
 	seen := map[string]struct{}{}
@@ -173,21 +250,29 @@ func DeletePhoneContactsWithRegion(ctx context.Context, numbers []string, region
 	if len(canonical) == 0 {
 		return 0, ErrInvalidPhoneContact
 	}
-	result := DB.WithContext(ctx).Where("number IN ?", canonical).Delete(&PhoneContact{})
+	result := DB.WithContext(ctx).Where("owner_id = ? AND number IN ?", ownerID, canonical).Delete(&PhoneContact{})
 	return int(result.RowsAffected), result.Error
 }
 
 func LookupPhoneIdentity(ctx context.Context, raw string) phonelookup.Result {
-	return LookupPhoneIdentityWithRegion(ctx, raw, "")
+	return LookupPhoneIdentityForOwnerWithRegion(ctx, legacyPhoneContactRuntimeOwner(), raw, "")
 }
 
 func LookupPhoneIdentityWithRegion(ctx context.Context, raw, region string) phonelookup.Result {
+	return LookupPhoneIdentityForOwnerWithRegion(ctx, legacyPhoneContactRuntimeOwner(), raw, region)
+}
+
+func LookupPhoneIdentityForOwner(ctx context.Context, ownerID, raw string) phonelookup.Result {
+	return LookupPhoneIdentityForOwnerWithRegion(ctx, ownerID, raw, "")
+}
+
+func LookupPhoneIdentityForOwnerWithRegion(ctx context.Context, ownerID, raw, region string) phonelookup.Result {
 	result := phonelookup.LookupWithRegion(raw, region)
 	canonical := phonelookup.CanonicalWithRegion(raw, region)
 	if result.Number == "" && canonical == "" {
 		return result
 	}
-	row, err := GetPhoneContact(ctx, canonical)
+	row, err := GetPhoneContactForOwner(ctx, ownerID, canonical)
 	if err != nil || strings.TrimSpace(row.Name) == "" {
 		return result
 	}
@@ -207,7 +292,7 @@ func resolvePhoneContactID(ctx context.Context, request phoneContactIDRequest) (
 	}
 	var existing PhoneContact
 	err := request.Database.WithContext(ctx).
-		Select("contact_id").Where("number = ?", request.Number).First(&existing).Error
+		Select("contact_id").Where("owner_id = ? AND number = ?", request.OwnerID, request.Number).First(&existing).Error
 	if err == nil && strings.TrimSpace(existing.ContactID) != "" {
 		return existing.ContactID, nil
 	}
@@ -215,6 +300,14 @@ func resolvePhoneContactID(ctx context.Context, request phoneContactIDRequest) (
 		return "", err
 	}
 	return newPhoneContactID()
+}
+
+func normalizePhoneContactOwner(ownerID string) (string, error) {
+	ownerID = strings.TrimSpace(ownerID)
+	if ownerID == "" {
+		return "", ErrInvalidPhoneContact
+	}
+	return ownerID, nil
 }
 
 func assignImportContactID(input *PhoneContactInput, groups map[string]string) error {

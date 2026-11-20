@@ -130,6 +130,7 @@ type Call struct {
 	clientByeSent          bool
 	clientFinalSent        bool
 	terminalFinalized      bool
+	terminalOutcome        terminalOutcome
 	captureBasePath        string
 	cleanupOnce            sync.Once
 	finalizedEventOnce     sync.Once

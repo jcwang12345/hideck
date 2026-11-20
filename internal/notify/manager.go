@@ -32,6 +32,7 @@ type Manager struct {
 	commandReceiversStarted bool
 	confirmRegistry         *confirmRegistry
 	notificationLocation    *time.Location
+	outboundCalls           outboundCoordinatorHolder
 }
 
 type ManagerOptions struct {
@@ -167,6 +168,15 @@ func (m *Manager) helpDevices() []HelpDevice {
 
 func (m *Manager) SetBalanceCommandHandler(handler CommandHandler) error {
 	return m.CommandService().SetHandler("balance", handler)
+}
+
+// SetOutboundCallCoordinator attaches the resource/dispatch owner used by all
+// bot initiated calls. Passing nil intentionally makes call commands fail
+// closed until the service is wired again.
+func (m *Manager) SetOutboundCallCoordinator(coordinator OutboundCallCoordinator) {
+	if m != nil {
+		m.outboundCalls.set(coordinator)
+	}
 }
 
 // NotifySMS 实现 device.Notifier 接口 — 收到短信通知

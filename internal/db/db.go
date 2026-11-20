@@ -7,8 +7,11 @@ import (
 	"strings"
 	"time"
 
+	"github.com/yibaiba/hideck/internal/dispatch"
+	"github.com/yibaiba/hideck/internal/identity"
 	"github.com/yibaiba/hideck/internal/mbn"
 	"github.com/yibaiba/hideck/internal/mcpserver"
+	"github.com/yibaiba/hideck/internal/resourcecatalog"
 
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
@@ -150,9 +153,22 @@ func Init(dbPath string) error {
 	if err := MigrateSMSContactIdentityKey(DB); err != nil {
 		return err
 	}
+	if err := MigratePhoneContactOwners(DB); err != nil {
+		return err
+	}
 
 	// 自动迁移
 	if err := DB.AutoMigrate(
+		&identity.User{},
+		&identity.WebSession{},
+		&resourcecatalog.CardContainer{},
+		&resourcecatalog.SubscriptionProfile{},
+		&resourcecatalog.PhoneNumber{},
+		&resourcecatalog.NumberPool{},
+		&resourcecatalog.NumberPoolMember{},
+		&resourcecatalog.NumberPoolUser{},
+		&resourcecatalog.DispatchPolicy{},
+		&resourcecatalog.AuditEvent{},
 		&mcpserver.Token{},
 		&mbn.Asset{}, &mbn.Policy{}, &mbn.Operation{},
 		&Device{},
@@ -187,6 +203,9 @@ func Init(dbPath string) error {
 		&IMSSubscriptionRejection{},
 		&IMSMWIRejection{},
 	); err != nil {
+		return err
+	}
+	if err := dispatch.Migrate(DB); err != nil {
 		return err
 	}
 	if err := MigratePhoneContactIDs(DB); err != nil {

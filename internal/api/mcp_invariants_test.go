@@ -17,6 +17,8 @@ import (
 	"github.com/yibaiba/hideck/internal/config"
 	"github.com/yibaiba/hideck/internal/db"
 	"github.com/yibaiba/hideck/internal/device"
+	"github.com/yibaiba/hideck/internal/dispatch"
+	"github.com/yibaiba/hideck/internal/identity"
 	"github.com/yibaiba/hideck/internal/mcpserver"
 )
 
@@ -58,7 +60,11 @@ func TestMCPSharedSMSFailuresWithRealSDK(t *testing.T) {
 		sends.Add(1)
 		return errors.New("modem rejected SMS")
 	})
-	session := connectMCPTestClient(t, &Server{pool: pool})
+	dispatcher, err := dispatch.New(db.DB, time.Now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	session := connectMCPTestClient(t, &Server{pool: pool, dispatcher: dispatcher})
 	for _, tc := range []struct {
 		name, selector, value, expected string
 	}{
@@ -128,7 +134,7 @@ func testMCPBindingInvalidation(t *testing.T, suffix string) {
 		return nil
 	})
 	router := gin.New()
-	server.registerMCPManagement(router.Group("/api"))
+	server.registerMCPManagement(router.Group("/api", testPrincipalMiddleware(identity.RoleAdmin)))
 	bound, revoked := make(chan struct{}), make(chan struct{})
 	go func() {
 		defer close(bound)

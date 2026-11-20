@@ -2,12 +2,14 @@ package e911
 
 import (
 	"context"
+	"errors"
 	"os"
 	"strings"
 	"testing"
 
 	runtimee911 "github.com/iniwex5/vowifi-go/runtimehost/e911"
 	"github.com/yibaiba/hideck/internal/modem"
+	"github.com/yibaiba/hideck/internal/websheet"
 )
 
 func TestCoordinatorDoesNotRunEntitlementProbes(t *testing.T) {
@@ -95,6 +97,26 @@ func TestBuildRuntimeE911IdentityIgnoresDebugCachedTokenEnv(t *testing.T) {
 	}
 	if got.GID1 != "A1B2" {
 		t.Fatalf("GID1=%q", got.GID1)
+	}
+}
+
+func TestCoordinatorBindsCreatorToWebsheetSession(t *testing.T) {
+	broker := websheet.New(websheet.Config{AllowPrivateHosts: true})
+	coordinator := &Coordinator{OwnerUserID: "creator-user", Websheets: broker}
+
+	info, err := coordinator.createOwnedWebsheet(t.Context(), websheet.Request{URL: "https://203.0.113.10/e911"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	session, err := broker.Get(info.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := session.AuthorizeOwner("creator-user", false); err != nil {
+		t.Fatalf("creator authorization error=%v", err)
+	}
+	if err := session.AuthorizeOwner("different-user", false); !errors.Is(err, websheet.ErrUnauthorized) {
+		t.Fatalf("different user authorization error=%v, want ErrUnauthorized", err)
 	}
 }
 

@@ -10,6 +10,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/yibaiba/hideck/internal/config"
+	"github.com/yibaiba/hideck/internal/identity"
 	"github.com/yibaiba/hideck/internal/mcpserver"
 )
 
@@ -57,7 +58,7 @@ func (failingMCPTokenDeletion) Delete(context.Context, string) error {
 func TestMCPTokenDeleteFailurePreservesRecordAndAudio(t *testing.T) {
 	server, token, secret := newMCPTokenDeletionServer(t, failingMCPTokenDeletion{&memoryMCPTokens{}})
 	router := gin.New()
-	server.registerMCPManagement(router.Group("/api"))
+	server.registerMCPManagement(router.Group("/api", testPrincipalMiddleware(identity.RoleAdmin)))
 	response := httptest.NewRecorder()
 	router.ServeHTTP(response, httptest.NewRequest(http.MethodDelete, "/api/mcp/tokens/"+token.ID+"/record", nil))
 	if response.Code != http.StatusInternalServerError {

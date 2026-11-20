@@ -1,26 +1,25 @@
 package sim
 
 import (
-	"encoding/hex"
+	"fmt"
 	"strings"
 )
 
-// maskHexBytes 将输入的字节切片格式化为 hex 字符串，并对中间部分进行掩码脱敏处理以防泄露敏感卡片鉴权数据
+// maskHexBytes never emits cryptographic material. RAND, AUTN, RES, CK, IK,
+// AUTS and APDU bodies remain sensitive even when only a prefix or suffix is
+// logged; length is sufficient for diagnostics.
 func maskHexBytes(b []byte) string {
 	if len(b) == 0 {
 		return ""
 	}
-	return maskHexString(hex.EncodeToString(b))
+	return fmt.Sprintf("[redacted:%dB]", len(b))
 }
 
-// maskHexString 对 Hex 编码的敏感密文/响应字符串进行部分遮罩脱敏（前后保留 12 字符，中间以 "..." 遮罩）
+// maskHexString keeps only the encoded length and never exposes a fragment.
 func maskHexString(s string) string {
 	s = strings.TrimSpace(s)
 	if s == "" {
 		return ""
 	}
-	if len(s) <= 24 {
-		return s
-	}
-	return s[:12] + "..." + s[len(s)-12:]
+	return fmt.Sprintf("[redacted:%dhex]", len(s))
 }

@@ -90,8 +90,29 @@ async function acceptDisclaimer() {
   disclaimerAccepted.value = true
 }
 
-watch(() => auth.isAuthenticated, (isAuthenticated) => {
+watch(() => [auth.isAuthenticated, auth.role] as const, ([isAuthenticated, role]) => {
   if (isAuthenticated) {
+    // The device clock and global disclaimer are administrator resources.
+    // Wait for /auth/me to establish the role after a page reload, then let
+    // members enter their scoped phone/SMS workspace without calling routes
+    // that the fail-closed API guard correctly denies to them.
+    if (!role) {
+      deviceTimeState.value = 'loading'
+      disclaimerState.value = 'loading'
+      return
+    }
+    if (role !== 'admin') {
+      deviceTimeGeneration++
+      disclaimerGeneration++
+      resetDeviceTime()
+      deviceTimeState.value = 'ready'
+      disclaimerState.value = 'ready'
+      deviceTimeError.value = ''
+      disclaimerError.value = ''
+      disclaimerActionError.value = ''
+      disclaimerAccepted.value = true
+      return
+    }
     void syncDeviceTime()
     void loadDisclaimerStatus()
     return
@@ -130,7 +151,7 @@ const startupGateState = computed(() => ({
   disclaimerState: disclaimerState.value
 }))
 const canRenderShell = computed(() => resolveCanRenderShell(startupGateState.value))
-const showDisclaimer = computed(() => canShowDisclaimer({
+const showDisclaimer = computed(() => auth.isAdmin && canShowDisclaimer({
   ...startupGateState.value,
   accepted: disclaimerAccepted.value
 }))

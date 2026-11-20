@@ -25,7 +25,9 @@ func MigratePhoneContactIDs(database *gorm.DB) error {
 			if strings.TrimSpace(row.Number) == "" {
 				continue
 			}
-			if err := tx.Model(&PhoneContact{}).Where("number = ?", row.Number).Update("contact_id", id).Error; err != nil {
+			if err := tx.Model(&PhoneContact{}).
+				Where("owner_id = ? AND number = ?", row.OwnerID, row.Number).
+				Update("contact_id", id).Error; err != nil {
 				return err
 			}
 		}

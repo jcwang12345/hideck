@@ -289,6 +289,7 @@ type Manager struct {
 	chipInfoCache               *EUICCChipInfo // 芯片信息缓存（硬件信息基本不变）
 	overviewCache               *EsimOverview  // eSIM 总览缓存（跟随 Manager / Worker 实例）
 	overviewLastErr             error
+	overviewNoEUICC             bool // 已完成 AID 扫描并明确确认当前卡不含 eUICC
 	overviewReloading           bool
 	overviewGeneration          uint64
 	overviewLoader              func() (*EsimOverview, error)
@@ -1488,6 +1489,21 @@ func (m *Manager) setOverviewCache(overview *EsimOverview, err error, generation
 	}
 	m.overviewCache = cloneOverview(overview)
 	m.overviewLastErr = err
+	m.overviewNoEUICC = false
+	if overview != nil {
+		m.chipInfoCache = cloneChipInfo(overview.ChipInfo)
+	}
+}
+
+func (m *Manager) setNoEUICCOverviewCache(overview *EsimOverview, generation uint64) {
+	m.cacheMu.Lock()
+	defer m.cacheMu.Unlock()
+	if generation != m.overviewGeneration {
+		return
+	}
+	m.overviewCache = cloneOverview(overview)
+	m.overviewLastErr = nil
+	m.overviewNoEUICC = true
 	if overview != nil {
 		m.chipInfoCache = cloneChipInfo(overview.ChipInfo)
 	}
@@ -1501,6 +1517,7 @@ func (m *Manager) invalidateOverviewCache(reason string) {
 	m.overviewGeneration++
 	m.overviewCache = nil
 	m.overviewLastErr = nil
+	m.overviewNoEUICC = false
 	m.chipInfoCache = nil
 	m.cacheMu.Unlock()
 	if strings.TrimSpace(reason) != "" {
@@ -1512,6 +1529,7 @@ func (m *Manager) clearHardwareDiscoveryCachesLocked() {
 	m.overviewGeneration++
 	m.overviewCache = nil
 	m.overviewLastErr = nil
+	m.overviewNoEUICC = false
 	m.chipInfoCache = nil
 	m.discoveredEUICCs = nil
 }
@@ -1672,7 +1690,7 @@ func (m *Manager) loadOverview() (*EsimOverview, error) {
 			if errors.Is(loadErr, ErrNoEUICC) {
 				empty := &EsimOverview{Profiles: []EUICCProfiles{}}
 				logger.Info("未检测到 eUICC，返回空总览", "device", m.deviceID, "reason", loadErr)
-				m.setOverviewCache(empty, nil, generation)
+				m.setNoEUICCOverviewCache(empty, generation)
 				return cloneOverview(empty), nil
 			}
 			m.setOverviewCache(nil, loadErr, generation)
@@ -2010,6 +2028,27 @@ func (m *Manager) CachedProfileGroups() []EUICCProfiles {
 		return nil
 	}
 	return cloneProfiles(overview.Profiles)
+}
+
+// CachedCardTypeEvidence returns only evidence already collected by an eUICC
+// overview scan. It never opens a logical channel or sends an APDU. A physical
+// UICC result is returned only after a complete candidate-AID scan explicitly
+// reported ErrNoEUICC; a missing cache remains unknown.
+func (m *Manager) CachedCardTypeEvidence() (euiccObserved bool, physicalUICCConfirmed bool) {
+	if m == nil {
+		return false, false
+	}
+	m.cacheMu.RLock()
+	defer m.cacheMu.RUnlock()
+	if m.overviewCache == nil {
+		return false, false
+	}
+	if len(m.overviewCache.Profiles) > 0 ||
+		(m.overviewCache.ChipInfo != nil && len(m.overviewCache.ChipInfo.EIDs) > 0) ||
+		len(m.discoveredEUICCs) > 0 {
+		return true, false
+	}
+	return false, m.overviewNoEUICC
 }
 
 func (m *Manager) LookupProfilePPR(iccid string) (disablingNotAllowed bool, known bool) {

@@ -74,9 +74,15 @@ func e911ErrorIsTimeout(err error) bool {
 }
 
 func (s *Server) handleDeviceE911Websheet(c *gin.Context) {
+	principal, ok := CurrentPrincipal(c)
+	if !ok {
+		abortAuthorization(c, http.StatusUnauthorized, "unauthorized", "未授权")
+		return
+	}
 	coord := &e911.Coordinator{
-		Pool:      s.pool,
-		Websheets: s.websheets,
+		OwnerUserID: principal.UserID,
+		Pool:        s.pool,
+		Websheets:   s.websheets,
 	}
 	info, err := coord.StartWebsheet(c.Request.Context(), deviceIDParam(c))
 	if err != nil {

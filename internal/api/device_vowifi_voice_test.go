@@ -10,8 +10,8 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/yibaiba/hideck/internal/config"
 	"github.com/iniwex5/vowifi-go/runtimehost/voicehost"
+	"github.com/yibaiba/hideck/internal/config"
 )
 
 type apiVoiceCall struct{ id string }
@@ -94,11 +94,11 @@ func newVoiceCallTestRouter(t *testing.T) (http.Handler, *apiVoiceAgent) {
 	if err := gateway.SetAgent("wwan0", agent); err != nil {
 		t.Fatalf("SetAgent: %v", err)
 	}
-	server := &Server{
-		auth:          config.WebConfig{Username: "admin", Password: "secret"},
-		voiceGW:       gateway,
-		loginAttempts: make(map[string]loginAttempt),
-	}
+	server, _ := newManagedOutboundTestServer(t)
+	server.auth = config.WebConfig{Username: "admin", Password: "secret"}
+	server.voiceGW = gateway
+	server.loginAttempts = make(map[string]loginAttempt)
+	server.pool.SetVoiceGateway(gateway)
 	return server.newRouter(), agent
 }
 

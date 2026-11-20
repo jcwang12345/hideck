@@ -5,14 +5,19 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/glebarez/sqlite"
 	"github.com/yibaiba/hideck/internal/config"
 	"github.com/yibaiba/hideck/internal/device"
+	"github.com/yibaiba/hideck/internal/dispatch"
+	"github.com/yibaiba/hideck/internal/identity"
 	"github.com/yibaiba/hideck/internal/outbound"
+	"gorm.io/gorm"
 )
 
 type deniedOutbound struct{}
@@ -31,11 +36,23 @@ func TestHandleSendSMSReturnsSharedLimitBeforeSending(t *testing.T) {
 	pool.SetOutboundLimiter(deniedOutbound{})
 	sent := false
 	pool.SetRoutedSMSTestSenders(nil, func(string, string, string) error { sent = true; return nil })
-	server := &Server{pool: pool}
+	database, err := gorm.Open(sqlite.Open(filepath.Join(t.TempDir(), "sms-dispatch.db")), &gorm.Config{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := dispatch.Migrate(database); err != nil {
+		t.Fatal(err)
+	}
+	dispatcher, err := dispatch.New(database, time.Now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	server := &Server{pool: pool, dispatcher: dispatcher}
 	recorder := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(recorder)
 	c.Request = httptest.NewRequest(http.MethodPost, "/api/sms/send", strings.NewReader(`{"device_id":"dev","phone":"10010","message":"test"}`))
 	c.Request.Header.Set("Content-Type", "application/json")
+	installPrincipal(c, identity.Principal{UserID: "legacy-admin", Role: identity.RoleAdmin}, identity.WebSession{})
 	server.handleSendSMS(c)
 	if recorder.Code != http.StatusTooManyRequests || sent || recorder.Header().Get("Retry-After") != "5" {
 		t.Fatalf("status=%d sent=%v body=%s", recorder.Code, sent, recorder.Body)

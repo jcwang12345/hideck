@@ -2,13 +2,16 @@ package api
 
 import (
 	"errors"
+	"fmt"
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/nyaruka/phonenumbers/v2"
 	"github.com/yibaiba/hideck/internal/device"
+	"github.com/yibaiba/hideck/internal/identity"
 	"github.com/yibaiba/hideck/internal/phone"
 	"github.com/yibaiba/hideck/pkg/logger"
 )
@@ -56,10 +59,10 @@ func (s *Server) registerPhoneRoutes(api *gin.RouterGroup) {
 	api.POST("/phone/calls/:call_id/switch", s.handlePhoneSwitch)
 	api.DELETE("/phone/calls/:call_id", s.handlePhoneHangup)
 	api.PUT("/phone/calls/:call_id/media", s.handlePhoneRefreshMedia)
-	api.GET("/phone/events", s.handlePhoneEvents)
+	api.GET("/phone/events", s.handleScopedPhoneEvents)
 	api.GET("/phone/history", s.handlePhoneHistory)
 	api.POST("/phone/history/delete", s.handlePhoneHistoryDelete)
-	api.GET("/phone/recordings/:recording", s.handleCommandRecording)
+	api.GET("/phone/recordings/:recording", s.handlePhoneRecording)
 	s.registerPhoneContactRoutes(api)
 }
 
@@ -69,6 +72,12 @@ func (s *Server) handlePhoneDevices(c *gin.Context) {
 
 func (s *Server) usePhoneDevices(c businessContext) {
 	if !s.requirePhone(c) {
+		return
+	}
+	if scope, rest, ok := s.phoneAccess(c); !ok {
+		return
+	} else if rest && !scope.Administrator {
+		abortAuthorization(c.(*gin.Context), http.StatusForbidden, "phone_device_access_forbidden", "普通用户不能直接选择电话设备")
 		return
 	}
 	devices := make([]gin.H, 0)
@@ -134,11 +143,15 @@ func (s *Server) handlePhoneMedia(c *gin.Context) {
 	if !s.requirePhone(c) {
 		return
 	}
+	scope, _, ok := s.phoneAccess(c)
+	if !ok {
+		return
+	}
 	var request phoneMediaRequest
 	if !decodePhoneJSON(c, &request) {
 		return
 	}
-	answer, err := s.phone.CreateMedia(c.Request.Context(), s.authSnapshot().Username, request.SDP, c.Request.Host)
+	answer, err := s.phone.CreateMediaScoped(c.Request.Context(), scope, request.SDP, c.Request.Host)
 	if err != nil {
 		s.respondPhoneError(c, err)
 		return
@@ -150,7 +163,11 @@ func (s *Server) handlePhoneMediaCancel(c *gin.Context) {
 	if !s.requirePhone(c) {
 		return
 	}
-	if err := s.phone.CancelMedia(s.authSnapshot().Username, c.Param("media_id"), phoneLease(c)); err != nil {
+	scope, _, ok := s.phoneAccess(c)
+	if !ok {
+		return
+	}
+	if err := s.phone.CancelMediaScoped(scope, c.Param("media_id"), phoneLease(c)); err != nil {
 		s.respondPhoneError(c, err)
 		return
 	}
@@ -162,6 +179,14 @@ func (s *Server) handlePhoneStartCall(c *gin.Context) {
 }
 
 func (s *Server) usePhoneStartCall(c businessContext) {
+	scope, rest, ok := s.phoneAccess(c)
+	if !ok {
+		return
+	}
+	if rest && !scope.Administrator {
+		abortAuthorization(c.(*gin.Context), http.StatusForbidden, "phone_legacy_dial_forbidden", "普通用户请通过号码调度接口发起通话")
+		return
+	}
 	releaseOperation, allowed := s.acquireBusinessMutation(c)
 	if !allowed {
 		return
@@ -175,21 +200,34 @@ func (s *Server) usePhoneStartCall(c businessContext) {
 	if !decodePhoneJSON(c, &request) {
 		return
 	}
-	if s.pool != nil {
-		if err := s.pool.PrepareCellularCall(businessRequestContext(c), request.DeviceID); err != nil {
-			s.respondPhoneError(c, err)
-			return
-		}
-	}
-	call, err := s.phone.StartCall(phone.StartCallRequest{
-		Owner: s.authSnapshot().Username, DeviceID: request.DeviceID, Callee: request.Callee,
-		MediaID: request.MediaID, Lease: phoneLease(c),
-	})
-	if err != nil {
-		s.respondPhoneError(c, err)
+	request.DeviceID = strings.TrimSpace(request.DeviceID)
+	request.Callee = strings.TrimSpace(request.Callee)
+	request.MediaID = strings.TrimSpace(request.MediaID)
+	if request.DeviceID == "" || request.Callee == "" || request.MediaID == "" {
+		respondManagedOutboundError(c, dispatchAttemptError{code: "invalid_request", err: errors.New("设备、目标号码和媒体会话不能为空")})
 		return
 	}
-	c.JSON(http.StatusAccepted, call)
+	iccid := ""
+	if s.pool != nil {
+		if worker := s.pool.GetWorker(request.DeviceID); worker != nil {
+			iccid = worker.CurrentICCID()
+		}
+	}
+	managed, err := s.reserveDirectOutbound(businessRequestContext(c), scope.UserID, request.DeviceID, iccid, "", request.Callee)
+	if err != nil {
+		respondManagedOutboundError(c, err)
+		return
+	}
+	call, err := s.startManagedPhoneCall(businessRequestContext(c), managed, scope, request.Callee, request.MediaID, phoneLease(c))
+	if err != nil && strings.TrimSpace(call.CallID) == "" {
+		respondManagedOutboundError(c, dispatchAttemptError{code: "dial_failed", err: err})
+		return
+	}
+	response := gin.H{"status": "ok", "request": managed.Reservation.Request, "lease": managed.Reservation.Lease, "call": call}
+	if err != nil {
+		response["warning"] = err.Error()
+	}
+	c.JSON(http.StatusAccepted, response)
 }
 
 func (s *Server) handlePhoneActiveCalls(c *gin.Context) {
@@ -200,7 +238,16 @@ func (s *Server) usePhoneActiveCalls(c businessContext) {
 	if !s.requirePhone(c) {
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"calls": s.phone.Active(phoneLease(c))})
+	scope, _, ok := s.phoneAccess(c)
+	if !ok {
+		return
+	}
+	calls, err := s.phone.ActiveScoped(scope, phoneLease(c))
+	if err != nil {
+		s.respondPhoneError(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"calls": calls})
 }
 
 func (s *Server) handlePhoneAnswer(c *gin.Context) {
@@ -208,6 +255,10 @@ func (s *Server) handlePhoneAnswer(c *gin.Context) {
 }
 
 func (s *Server) usePhoneAnswer(c businessContext) {
+	scope, _, ok := s.phoneAccess(c)
+	if !ok {
+		return
+	}
 	releaseOperation, allowed := s.acquireBusinessMutation(c)
 	if !allowed {
 		return
@@ -217,11 +268,11 @@ func (s *Server) usePhoneAnswer(c businessContext) {
 	if !s.requirePhone(c) {
 		return
 	}
-	request, ok := s.decodePhoneControl(c)
+	request, ok := s.decodePhoneControl(c, scope)
 	if !ok {
 		return
 	}
-	call, err := s.phone.Answer(businessRequestContext(c), request)
+	call, err := s.phone.AnswerScoped(businessRequestContext(c), scope, request)
 	if err != nil {
 		s.respondPhoneError(c, err)
 		return
@@ -234,6 +285,10 @@ func (s *Server) handlePhoneReject(c *gin.Context) {
 }
 
 func (s *Server) usePhoneReject(c businessContext) {
+	scope, _, ok := s.phoneAccess(c)
+	if !ok {
+		return
+	}
 	releaseOperation, allowed := s.acquireBusinessMutation(c)
 	if !allowed {
 		return
@@ -243,11 +298,11 @@ func (s *Server) usePhoneReject(c businessContext) {
 	if !s.requirePhone(c) {
 		return
 	}
-	request, ok := s.decodePhoneControl(c)
+	request, ok := s.decodePhoneControl(c, scope)
 	if !ok {
 		return
 	}
-	if err := s.phone.Reject(request); err != nil {
+	if err := s.phone.RejectScoped(scope, request); err != nil {
 		s.respondPhoneError(c, err)
 		return
 	}
@@ -259,6 +314,10 @@ func (s *Server) handlePhoneDTMF(c *gin.Context) {
 }
 
 func (s *Server) usePhoneDTMF(c businessContext) {
+	scope, _, ok := s.phoneAccess(c)
+	if !ok {
+		return
+	}
 	releaseOperation, allowed := s.acquireBusinessMutation(c)
 	if !allowed {
 		return
@@ -272,7 +331,7 @@ func (s *Server) usePhoneDTMF(c businessContext) {
 	if !decodePhoneJSON(c, &request) {
 		return
 	}
-	err := s.phone.DTMF(s.authSnapshot().Username, c.Param("call_id"), phoneLease(c), request.Digit)
+	err := s.phone.DTMFScoped(scope, c.Param("call_id"), phoneLease(c), request.Digit)
 	if err != nil {
 		s.respondPhoneError(c, err)
 		return
@@ -285,6 +344,10 @@ func (s *Server) handlePhoneHold(c *gin.Context) {
 }
 
 func (s *Server) usePhoneHold(c businessContext) {
+	scope, _, ok := s.phoneAccess(c)
+	if !ok {
+		return
+	}
 	releaseOperation, allowed := s.acquireBusinessMutation(c)
 	if !allowed {
 		return
@@ -294,7 +357,7 @@ func (s *Server) usePhoneHold(c businessContext) {
 	if !s.requirePhone(c) {
 		return
 	}
-	err := s.phone.Hold(businessRequestContext(c), s.authSnapshot().Username, c.Param("call_id"), phoneLease(c))
+	err := s.phone.HoldScoped(businessRequestContext(c), scope, c.Param("call_id"), phoneLease(c))
 	if err != nil {
 		s.respondPhoneError(c, err)
 		return
@@ -307,6 +370,10 @@ func (s *Server) handlePhoneResume(c *gin.Context) {
 }
 
 func (s *Server) usePhoneResume(c businessContext) {
+	scope, _, ok := s.phoneAccess(c)
+	if !ok {
+		return
+	}
 	releaseOperation, allowed := s.acquireBusinessMutation(c)
 	if !allowed {
 		return
@@ -316,7 +383,7 @@ func (s *Server) usePhoneResume(c businessContext) {
 	if !s.requirePhone(c) {
 		return
 	}
-	err := s.phone.Resume(businessRequestContext(c), s.authSnapshot().Username, c.Param("call_id"), phoneLease(c))
+	err := s.phone.ResumeScoped(businessRequestContext(c), scope, c.Param("call_id"), phoneLease(c))
 	if err != nil {
 		s.respondPhoneError(c, err)
 		return
@@ -329,6 +396,10 @@ func (s *Server) handlePhoneSwitch(c *gin.Context) {
 }
 
 func (s *Server) usePhoneSwitch(c businessContext) {
+	scope, _, ok := s.phoneAccess(c)
+	if !ok {
+		return
+	}
 	releaseOperation, allowed := s.acquireBusinessMutation(c)
 	if !allowed {
 		return
@@ -338,7 +409,7 @@ func (s *Server) usePhoneSwitch(c businessContext) {
 	if !s.requirePhone(c) {
 		return
 	}
-	err := s.phone.Switch(s.authSnapshot().Username, c.Param("call_id"), phoneLease(c))
+	err := s.phone.SwitchScoped(scope, c.Param("call_id"), phoneLease(c))
 	if err != nil {
 		s.respondPhoneError(c, err)
 		return
@@ -351,6 +422,10 @@ func (s *Server) handlePhoneHangup(c *gin.Context) {
 }
 
 func (s *Server) usePhoneHangup(c businessContext) {
+	scope, _, ok := s.phoneAccess(c)
+	if !ok {
+		return
+	}
 	releaseOperation, allowed := s.acquireBusinessMutation(c)
 	if !allowed {
 		return
@@ -360,7 +435,7 @@ func (s *Server) usePhoneHangup(c businessContext) {
 	if !s.requirePhone(c) {
 		return
 	}
-	err := s.phone.Hangup(businessRequestContext(c), s.authSnapshot().Username, c.Param("call_id"), phoneLease(c))
+	err := s.phone.HangupScoped(businessRequestContext(c), scope, c.Param("call_id"), phoneLease(c))
 	if err != nil {
 		s.respondPhoneError(c, err)
 		return
@@ -372,12 +447,16 @@ func (s *Server) handlePhoneRefreshMedia(c *gin.Context) {
 	if !s.requirePhone(c) {
 		return
 	}
+	scope, _, ok := s.phoneAccess(c)
+	if !ok {
+		return
+	}
 	var request phoneRefreshRequest
 	if !decodePhoneJSON(c, &request) {
 		return
 	}
-	call, lease, err := s.phone.RefreshMedia(phone.RefreshRequest{
-		Owner: s.authSnapshot().Username, CallID: c.Param("call_id"), MediaID: request.MediaID,
+	call, lease, err := s.phone.RefreshMediaScoped(scope, phone.RefreshRequest{
+		CallID: c.Param("call_id"), MediaID: request.MediaID,
 		Lease: phoneLease(c), Takeover: request.Takeover,
 	})
 	if err != nil {
@@ -395,8 +474,12 @@ func (s *Server) usePhoneHistory(c businessContext) {
 	if !s.requirePhone(c) {
 		return
 	}
+	scope, _, ok := s.phoneAccess(c)
+	if !ok {
+		return
+	}
 	limit, _ := strconv.Atoi(c.Query("limit"))
-	records, err := s.phone.History(businessRequestContext(c), limit)
+	records, err := s.phone.HistoryScoped(businessRequestContext(c), scope, limit)
 	if err != nil {
 		s.respondPhoneError(c, err)
 		return
@@ -409,6 +492,10 @@ func (s *Server) handlePhoneHistoryDelete(c *gin.Context) {
 }
 
 func (s *Server) usePhoneHistoryDelete(c businessContext) {
+	scope, _, ok := s.phoneAccess(c)
+	if !ok {
+		return
+	}
 	releaseOperation, allowed := s.acquireBusinessMutation(c)
 	if !allowed {
 		return
@@ -422,7 +509,7 @@ func (s *Server) usePhoneHistoryDelete(c businessContext) {
 	if !decodePhoneJSON(c, &request) {
 		return
 	}
-	deleted, err := s.phone.DeleteHistory(businessRequestContext(c), request.IDs)
+	deleted, err := s.phone.DeleteHistoryScoped(businessRequestContext(c), scope, request.IDs)
 	if err != nil {
 		s.respondPhoneError(c, err)
 		return
@@ -430,13 +517,101 @@ func (s *Server) usePhoneHistoryDelete(c businessContext) {
 	c.JSON(http.StatusOK, gin.H{"deleted": deleted})
 }
 
-func (s *Server) decodePhoneControl(c businessContext) (phone.ControlRequest, bool) {
+func (s *Server) handleScopedPhoneEvents(c *gin.Context) {
+	if !s.requirePhone(c) {
+		return
+	}
+	scope, _, ok := s.phoneAccess(c)
+	if !ok {
+		return
+	}
+	backlog, stream, cancel, err := s.phone.SubscribeScoped(scope, phoneLastEventID(c))
+	if err != nil {
+		s.respondPhoneError(c, err)
+		return
+	}
+	defer cancel()
+	c.Header("Content-Type", "text/event-stream")
+	c.Header("Cache-Control", "no-cache")
+	c.Header("Connection", "keep-alive")
+	c.Header("X-Accel-Buffering", "no")
+	c.Status(http.StatusOK)
+	_, _ = fmt.Fprint(c.Writer, ": connected\n\n")
+	c.Writer.Flush()
+	for _, event := range backlog {
+		writePhoneEvent(c, event)
+	}
+	c.Writer.Flush()
+	heartbeat := time.NewTicker(phoneEventHeartbeatInterval)
+	defer heartbeat.Stop()
+	for {
+		select {
+		case event, open := <-stream:
+			if !open {
+				return
+			}
+			writePhoneEvent(c, event)
+			c.Writer.Flush()
+		case <-heartbeat.C:
+			_, _ = fmt.Fprint(c.Writer, ": heartbeat\n\n")
+			c.Writer.Flush()
+		case <-c.Request.Context().Done():
+			return
+		case <-s.shutdownCh:
+			return
+		}
+	}
+}
+
+func (s *Server) handlePhoneRecording(c *gin.Context) {
+	if !s.requirePhone(c) {
+		return
+	}
+	name := strings.TrimSpace(c.Param("recording"))
+	if !validVoiceRecordingName(name) {
+		c.JSON(http.StatusBadRequest, gin.H{"status": "error", "code": "phone_invalid_recording", "message": "录音文件名无效"})
+		return
+	}
+	scope, _, ok := s.phoneAccess(c)
+	if !ok {
+		return
+	}
+	if err := s.phone.AuthorizeRecording(c.Request.Context(), scope, name); err != nil {
+		s.respondPhoneError(c, err)
+		return
+	}
+	s.handleCommandRecording(c)
+}
+
+func (s *Server) phoneAccess(c businessContext) (phone.AccessScope, bool, bool) {
+	if rest, ok := c.(*gin.Context); ok {
+		principal, found := CurrentPrincipal(rest)
+		if !found || strings.TrimSpace(principal.UserID) == "" {
+			abortAuthorization(rest, http.StatusUnauthorized, "unauthorized", "未授权")
+			return phone.AccessScope{}, true, false
+		}
+		return phone.AccessScope{
+			UserID:        strings.TrimSpace(principal.UserID),
+			Administrator: principal.Role == identity.RoleAdmin,
+		}, true, true
+	}
+	userID := strings.TrimSpace(s.authSnapshot().Username)
+	if userID == "" {
+		c.JSON(http.StatusUnauthorized, gin.H{"status": "error", "code": "unauthorized", "message": "未授权"})
+		return phone.AccessScope{}, false, false
+	}
+	// MCP keeps its legacy administrator semantics while REST always uses the
+	// authenticated identity principal above.
+	return phone.AccessScope{UserID: userID, Administrator: true}, false, true
+}
+
+func (s *Server) decodePhoneControl(c businessContext, scope phone.AccessScope) (phone.ControlRequest, bool) {
 	var request phoneControlRequest
 	if !decodePhoneJSON(c, &request) {
 		return phone.ControlRequest{}, false
 	}
 	return phone.ControlRequest{
-		Owner: s.authSnapshot().Username, CallID: c.Param("call_id"), MediaID: request.MediaID, Lease: phoneLease(c),
+		Owner: scope.UserID, CallID: c.Param("call_id"), MediaID: request.MediaID, Lease: phoneLease(c),
 	}, true
 }
 
@@ -465,6 +640,22 @@ func (s *Server) respondPhoneError(c businessContext, err error) {
 	status := http.StatusBadRequest
 	code := "phone_error"
 	switch {
+	case errors.Is(err, phone.ErrAccessScopeRequired):
+		status = http.StatusUnauthorized
+		code = "phone_unauthorized"
+		message = "未授权"
+	case errors.Is(err, phone.ErrAccessDenied):
+		status = http.StatusForbidden
+		code = "phone_forbidden"
+		message = "无权访问该通话"
+	case errors.Is(err, phone.ErrRecordingNotFound):
+		status = http.StatusNotFound
+		code = "phone_recording_not_found"
+		message = "通话录音不存在"
+	case errors.Is(err, phone.ErrScopedStoreUnavailable):
+		status = http.StatusServiceUnavailable
+		code = "phone_scope_unavailable"
+		message = "电话记录隔离服务不可用"
 	case errors.Is(err, phone.ErrActiveCallHistoryDelete):
 		status = http.StatusConflict
 		code = "phone_history_active"

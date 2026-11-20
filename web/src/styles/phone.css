@@ -120,11 +120,73 @@
 .console-header h2 { margin: 4px 0 0; color: var(--ui-text); font-size: 20px; line-height: 1.15; }
 .console-heading p { margin: 5px 0 0; color: var(--ui-text-muted); font-size: 11px; line-height: 1.4; }
 
-.device-selector { min-width: 0; display: grid; gap: 5px; }
-.device-selector-heading { min-height: 18px; display: flex; align-items: center; justify-content: space-between; gap: 12px; }
-.device-selector label, .number-field label { color: var(--ui-text-muted); font-size: 10px; font-weight: 650; }
+.device-selector, .pool-selector { min-width: 0; display: grid; gap: 7px; }
+.device-selector-heading, .pool-selector-heading { min-height: 18px; display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.device-selector label, .pool-selector label, .number-field label { color: var(--ui-text-muted); font-size: 10px; font-weight: 650; }
 .device-selector :deep(.el-select) { width: 100%; }
 .device-selector :deep(.el-select__wrapper) { min-height: 44px; background: var(--ui-surface); }
+.pool-selector :deep(.el-select) { width: 100%; }
+.pool-selector :deep(.el-select__wrapper) { min-height: 44px; background: var(--ui-surface); }
+
+.diagnostic-entry, .diagnostic-banner button, .pool-retry {
+  min-height: 36px;
+  padding: 0 11px;
+  border: 1px solid var(--ui-border);
+  border-radius: var(--ui-radius-pill);
+  background: var(--ui-surface);
+  color: var(--ui-primary);
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.pool-summary {
+  min-width: 0;
+  min-height: 58px;
+  padding: 9px 11px;
+  display: grid;
+  grid-template-columns: 8px minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 9px;
+  border: 1px solid var(--ui-border);
+  border-radius: var(--ui-radius-md);
+  background: var(--ui-surface-muted);
+}
+
+.pool-state-dot, .pool-dispatch-state > span {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--ui-text-muted);
+}
+
+.pool-summary.is-success .pool-state-dot, .pool-dispatch-state.is-success > span { background: var(--ui-success); }
+.pool-summary.is-warning .pool-state-dot, .pool-dispatch-state.is-warning > span { background: var(--ui-warning); }
+.pool-summary.is-danger .pool-state-dot, .pool-dispatch-state.is-danger > span { background: var(--ui-danger); }
+.pool-summary.is-info .pool-state-dot, .pool-dispatch-state.is-info > span { background: var(--ui-info); }
+.pool-summary-copy { min-width: 0; display: grid; gap: 2px; }
+.pool-summary-copy strong { color: var(--ui-text); font-size: 13px; }
+.pool-summary-copy small { overflow: hidden; color: var(--ui-text-muted); font-size: 12px; line-height: 1.35; text-overflow: ellipsis; white-space: nowrap; }
+.pool-capacity { min-width: 84px; display: grid; justify-items: end; gap: 1px; color: var(--ui-text-muted); }
+.pool-capacity strong { color: var(--ui-primary); font: 650 18px/1 var(--ui-font-mono); }
+.pool-capacity span { font-size: 12px; white-space: nowrap; }
+.pool-retry { min-height: 40px; }
+
+.diagnostic-banner {
+  padding: 10px 11px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border: 1px solid color-mix(in srgb, var(--ui-warning) 45%, var(--ui-border));
+  border-radius: var(--ui-radius-md);
+  background: var(--ui-warning-surface);
+}
+
+.diagnostic-banner > div { min-width: 0; }
+.diagnostic-banner strong { color: var(--ui-text); font-size: 13px; }
+.diagnostic-banner p { margin: 3px 0 0; color: var(--ui-text-muted); font-size: 12px; line-height: 1.35; }
+.diagnostic-banner button { flex: 0 0 auto; border-color: color-mix(in srgb, var(--ui-warning) 45%, var(--ui-border)); color: var(--ui-text); }
 
 .phone-setup-toggle {
   display: none;
@@ -234,6 +296,28 @@
   color: var(--ui-text-muted);
   font-size: 11px;
 }
+
+.pool-dispatch-state {
+  width: 336px;
+  max-width: 100%;
+  min-height: 58px;
+  padding: 10px 12px;
+  display: grid;
+  grid-template-columns: 8px minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+  border: 1px solid var(--ui-border);
+  border-radius: var(--ui-radius-lg);
+  background: var(--ui-surface-muted);
+}
+
+.pool-dispatch-state > div { min-width: 0; display: grid; gap: 3px; }
+.pool-dispatch-state strong { color: var(--ui-text); font-size: 13px; }
+.pool-dispatch-state small { color: var(--ui-text-muted); font-size: 12px; line-height: 1.4; }
+.pool-dispatch-state.is-success { border-color: color-mix(in srgb, var(--ui-success) 34%, var(--ui-border)); }
+.pool-dispatch-state.is-warning { border-color: color-mix(in srgb, var(--ui-warning) 38%, var(--ui-border)); }
+.pool-dispatch-state.is-danger { border-color: color-mix(in srgb, var(--ui-danger) 38%, var(--ui-border)); }
+.pool-dispatch-state.is-info { border-color: color-mix(in srgb, var(--ui-info) 32%, var(--ui-border)); }
 
 .number-field { width: 336px; max-width: 100%; min-width: 0; display: grid; grid-template-columns: minmax(0, 1fr); gap: 5px; }
 .number-field-heading { min-height: 44px; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 12px; }
@@ -408,8 +492,14 @@
   .console-heading { margin-bottom: 10px; display: flex; align-items: baseline; gap: 8px; }
   .console-heading > span, .console-heading p { display: none; }
   .console-heading h2 { margin: 0; font-size: 17px; }
-  .device-selector { width: 100%; min-width: 0; }
-  .device-selector-heading { min-height: 36px; }
+  .device-selector, .pool-selector { width: 100%; min-width: 0; }
+  .device-selector-heading, .pool-selector-heading { min-height: 36px; }
+  .diagnostic-entry { min-height: 40px; }
+  .pool-summary { grid-template-columns: 8px minmax(0, 1fr) auto; }
+  .pool-summary-copy small { overflow: visible; text-overflow: clip; white-space: normal; }
+  .pool-retry { grid-column: 2 / -1; justify-self: start; }
+  .diagnostic-banner { align-items: stretch; flex-direction: column; }
+  .diagnostic-banner button { min-height: 44px; }
   .phone-setup-toggle { display: inline-flex; }
   .phone-mode-bar { display: none; margin-top: 8px; padding: 12px 0 2px; }
   .phone-mode-bar.is-mobile-open { display: flex; }
@@ -424,7 +514,7 @@
   }
 
   .selected-device-status { min-height: 22px; }
-  .number-field { width: min(100%, 320px); }
+  .number-field, .pool-dispatch-state { width: min(100%, 320px); }
   .number-field-heading { min-height: 40px; }
   .number-field-heading button { min-height: 40px; }
   .number-input input { height: 46px; font-size: 26px; }
@@ -447,5 +537,5 @@
   .phone-page :deep(.phone-page-header .page-actions .el-button) { font-size: 0; width: 40px; padding: 0; }
   .phone-page :deep(.phone-page-header .page-actions .el-button)::after { content: "MCP"; font-size: 11px; }
   .media-state { max-width: 120px; overflow: hidden; text-overflow: ellipsis; }
-  .number-field, .call-mode-actions { width: 100%; }
+  .number-field, .call-mode-actions, .pool-dispatch-state { width: 100%; }
 }

@@ -16,11 +16,16 @@ type eventHub struct {
 	nextID      uint64
 	events      []Event
 	nextSubID   uint64
-	subscribers map[uint64]chan Event
+	subscribers map[uint64]eventSubscriber
+}
+
+type eventSubscriber struct {
+	stream chan Event
+	filter func(Event) bool
 }
 
 func newEventHub() *eventHub {
-	return &eventHub{subscribers: make(map[uint64]chan Event)}
+	return &eventHub{subscribers: make(map[uint64]eventSubscriber)}
 }
 
 func (hub *eventHub) publish(event Event) Event {
@@ -41,17 +46,24 @@ func (hub *eventHub) publish(event Event) Event {
 			"status", event.Call.Status)
 	}
 	for id, subscriber := range hub.subscribers {
+		if subscriber.filter != nil && !subscriber.filter(event) {
+			continue
+		}
 		select {
-		case subscriber <- event:
+		case subscriber.stream <- event:
 		default:
 			delete(hub.subscribers, id)
-			close(subscriber)
+			close(subscriber.stream)
 		}
 	}
 	return event
 }
 
 func (hub *eventHub) subscribe(afterID uint64) ([]Event, <-chan Event, func()) {
+	return hub.subscribeFiltered(afterID, nil)
+}
+
+func (hub *eventHub) subscribeFiltered(afterID uint64, filter func(Event) bool) ([]Event, <-chan Event, func()) {
 	hub.mu.Lock()
 	defer hub.mu.Unlock()
 	if afterID > hub.nextID {
@@ -60,19 +72,19 @@ func (hub *eventHub) subscribe(afterID uint64) ([]Event, <-chan Event, func()) {
 	}
 	backlog := make([]Event, 0, len(hub.events))
 	for _, event := range hub.events {
-		if event.ID > afterID {
+		if event.ID > afterID && (filter == nil || filter(event)) {
 			backlog = append(backlog, event)
 		}
 	}
 	hub.nextSubID++
 	id := hub.nextSubID
 	stream := make(chan Event, subscriberBufferSize)
-	hub.subscribers[id] = stream
+	hub.subscribers[id] = eventSubscriber{stream: stream, filter: filter}
 	return backlog, stream, func() {
 		hub.mu.Lock()
 		if subscriber, ok := hub.subscribers[id]; ok {
 			delete(hub.subscribers, id)
-			close(subscriber)
+			close(subscriber.stream)
 		}
 		hub.mu.Unlock()
 	}

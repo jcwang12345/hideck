@@ -15,6 +15,7 @@ export type PhoneMediaMode = 'none' | 'listen-only' | 'two-way'
 type PhoneState = {
   initialized: boolean
   loading: boolean
+  includeDevices: boolean
   devices: PhoneDevice[]
   calls: PhoneCall[]
   callsRevision: number
@@ -41,6 +42,7 @@ export const usePhoneStore = defineStore('phone', {
   state: (): PhoneState => ({
     initialized: false,
     loading: false,
+    includeDevices: true,
     devices: [],
     calls: [],
     callsRevision: 0,
@@ -81,15 +83,28 @@ export const usePhoneStore = defineStore('phone', {
     }
   },
   actions: {
-    async initialize() {
-      if (this.initialized) return
+    async initialize(options: { includeDevices?: boolean } = {}) {
+      const includeDevices = options.includeDevices !== false
+      const accessChanged = this.includeDevices !== includeDevices
+      this.includeDevices = includeDevices
+      if (!includeDevices) this.devices = []
+      if (this.initialized) {
+        if (includeDevices && accessChanged) {
+          try {
+            this.devices = await phoneService.devices()
+          } catch (error) {
+            this.error = phoneErrorMessage(error, '语音设备加载失败')
+          }
+        }
+        return
+      }
       this.initialized = true
       this.loading = true
       this.restoreControl()
       this.ensureMediaController()
       try {
         const [devices, calls, history] = await Promise.all([
-          phoneService.devices(),
+          includeDevices ? phoneService.devices() : Promise.resolve([]),
           phoneService.active(this.lease),
           phoneService.history()
         ])
@@ -123,7 +138,9 @@ export const usePhoneStore = defineStore('phone', {
       const callsRevision = this.callsRevision
       const snapshotSequence = ++this.callsSnapshotSequence
       const [devices, calls, history] = await Promise.all([
-        phoneService.devices(), phoneService.active(this.lease), phoneService.history()
+        this.includeDevices ? phoneService.devices() : Promise.resolve([]),
+        phoneService.active(this.lease),
+        phoneService.history()
       ])
       this.devices = devices
       if (callsRevision === this.callsRevision && snapshotSequence === this.callsSnapshotSequence) {
@@ -184,6 +201,36 @@ export const usePhoneStore = defineStore('phone', {
 
     async startListenOnlyCall(deviceId: string, callee: string) {
       return this.startCallWithMode(deviceId, callee, 'listen-only')
+    },
+
+    async startPoolCall(poolId: string, callee: string) {
+      return this.startPoolCallWithMode(poolId, callee, 'two-way')
+    },
+
+    async startPoolListenOnlyCall(poolId: string, callee: string) {
+      return this.startPoolCallWithMode(poolId, callee, 'listen-only')
+    },
+
+    async startPoolCallWithMode(
+      poolId: string,
+      callee: string,
+      mode: Exclude<PhoneMediaMode, 'none'>
+    ) {
+      this.error = ''
+      if (this.calls.some((call) => ACTIVE_STATUSES.has(call.status) && !call.read_only)) {
+        throw new Error('你已有一通正在进行的电话，请先结束后再拨号')
+      }
+      const media = mode === 'two-way'
+        ? await this.prepareMedia()
+        : await this.prepareReceiveOnlyMedia()
+      try {
+        const result = await phoneService.requestCall(poolId, callee, media.mediaId, media.lease)
+        this.upsertCall(result.call)
+        return result.call
+      } catch (error) {
+        this.releaseMedia()
+        throw error
+      }
     },
 
     async startCallWithMode(

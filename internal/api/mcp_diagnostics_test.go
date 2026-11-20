@@ -13,6 +13,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/yibaiba/hideck/internal/config"
+	"github.com/yibaiba/hideck/internal/identity"
 	"github.com/yibaiba/hideck/internal/mcpserver"
 )
 
@@ -104,7 +105,7 @@ func (failingMCPDiagnosticStore) List(context.Context) ([]mcpserver.Token, error
 func TestMCPDiagnosticsExposeInitializationAndStorageFailures(t *testing.T) {
 	server := &Server{mcpTokens: mcpserver.NewTokens(failingMCPDiagnosticStore{&memoryMCPTokens{}})}
 	router := gin.New()
-	server.registerMCPManagement(router.Group("/api"))
+	server.registerMCPManagement(router.Group("/api", testPrincipalMiddleware(identity.RoleAdmin)))
 	response := httptest.NewRecorder()
 	router.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/api/mcp/diagnostics", nil))
 	if response.Code != http.StatusInternalServerError || !strings.Contains(response.Body.String(), "database unavailable") {

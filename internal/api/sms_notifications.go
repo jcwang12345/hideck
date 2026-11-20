@@ -13,11 +13,15 @@ import (
 const smsNotificationCursorBits = 53
 
 func (s *Server) handleSMSNotifications(c *gin.Context) {
+	access, authorized := s.smsAccess(c)
+	if !authorized {
+		return
+	}
 	afterID, ok := parseSMSQueryAfterID(c)
 	if !ok {
 		return
 	}
-	result, err := db.GetSMSNotifications(c.Request.Context(), afterID)
+	result, err := db.GetSMSNotificationsScoped(c.Request.Context(), access.scope, afterID)
 	if err != nil {
 		slog.Error("查询短信提醒失败", "err", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"message": "短信提醒查询失败，请稍后重试"})
