@@ -108,6 +108,13 @@ func (c *Coordinator) StartWebsheet(ctx context.Context, deviceID string) (websh
 	req.ContentType = websheetReq.ContentType
 	req.Title = websheetReq.Title
 	req.Transport = websheetTransport
+	req.HeaderProfile = websheetReq.WebsheetProfile
+	for _, seed := range websheetReq.CookieSeeds {
+		req.CookieSeeds = append(req.CookieSeeds, websheet.CookieSeed{
+			SourceURL: seed.SourceURL,
+			SetCookie: seed.SetCookie,
+		})
+	}
 
 	session, err := c.Websheets.Create(ctx, req)
 	if err != nil {

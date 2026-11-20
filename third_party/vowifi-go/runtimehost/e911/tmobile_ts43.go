@@ -41,7 +41,9 @@ func startTMobileEntitlementFlow(ctx context.Context, req Request, endpoint, fal
 		if fallbackURL == "" {
 			return Response{}, ErrWebsheetUnavailable
 		}
-		return Response{URL: fallbackURL, ContentType: tmobileWebsheetContentType, Title: "E911 address"}, nil
+		return finalizeTMobileWebsheetResponse(Response{
+			URL: fallbackURL, ContentType: tmobileWebsheetContentType, Title: "E911 address",
+		}, nil), nil
 	}
 
 	initialURL, identity, err := tmobileEntitlementURL(endpoint, req.Identity)
@@ -56,6 +58,7 @@ func startTMobileEntitlementFlow(ctx context.Context, req Request, endpoint, fal
 	if err != nil {
 		return Response{}, err
 	}
+	cookieSeeds := collectEntitlementCookieSeeds(initialURL, response.Headers)
 	cookies := mergeEntitlementCookies("", response.Headers)
 
 	for attempts := 0; ; attempts++ {
@@ -64,13 +67,13 @@ func startTMobileEntitlementFlow(ctx context.Context, req Request, endpoint, fal
 			return Response{}, err
 		}
 		if final.URL != "" {
-			return state.applyToResponse(final), nil
+			return state.applyToResponse(finalizeTMobileWebsheetResponse(final, cookieSeeds)), nil
 		}
 		if !result.hasChallenge() {
 			if fallbackURL != "" {
-				return state.applyToResponse(Response{
+				return state.applyToResponse(finalizeTMobileWebsheetResponse(Response{
 					URL: fallbackURL, ContentType: tmobileWebsheetContentType, Title: "E911 address",
-				}), nil
+				}, cookieSeeds)), nil
 			}
 			return Response{}, fmt.Errorf("%w: T-Mobile entitlement response did not include ServiceFlow_URL", ErrWebsheetUnavailable)
 		}
@@ -93,8 +96,26 @@ func startTMobileEntitlementFlow(ctx context.Context, req Request, endpoint, fal
 		if err != nil {
 			return Response{}, err
 		}
+		cookieSeeds = append(cookieSeeds, collectEntitlementCookieSeeds(endpoint, response.Headers)...)
 		cookies = mergeEntitlementCookies(cookies, response.Headers)
 	}
+}
+
+func finalizeTMobileWebsheetResponse(response Response, cookieSeeds []CookieSeed) Response {
+	response.WebsheetProfile = WebsheetProfileIOSSafari
+	response.CookieSeeds = append([]CookieSeed(nil), cookieSeeds...)
+	return response
+}
+
+func collectEntitlementCookieSeeds(sourceURL string, headers []HeaderPair) []CookieSeed {
+	seeds := make([]CookieSeed, 0, 2)
+	for _, header := range headers {
+		if !strings.EqualFold(strings.TrimSpace(header.Key), "Set-Cookie") {
+			continue
+		}
+		seeds = append(seeds, CookieSeed{SourceURL: sourceURL, SetCookie: header.Value})
+	}
+	return seeds
 }
 
 func normalizeTMobileEntitlementEndpoint(endpoint string) string {

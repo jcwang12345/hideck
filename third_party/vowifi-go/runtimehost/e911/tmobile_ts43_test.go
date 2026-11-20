@@ -18,13 +18,15 @@ import (
 
 func TestStartEmergencyAddressUpdateRunsTMobileTS43WebsheetFlow(t *testing.T) {
 	const (
-		imsi       = "310260123456789"
-		imei       = "356306952701762"
-		permanent  = "0310260123456789@nai.epc.mnc260.mcc310.3gppnetwork.org"
-		websheet   = "https://wifi.t-mobile.test/e911"
-		webData    = "imsi=masked&addr=0&signature=abc"
-		sessionKey = "entitlement-session=abc123"
-		endpoint   = "https://ts43.example.test/ts43"
+		imsi             = "310260123456789"
+		imei             = "356306952701762"
+		permanent        = "0310260123456789@nai.epc.mnc260.mcc310.3gppnetwork.org"
+		websheet         = "https://wifi.t-mobile.test/e911"
+		webData          = "imsi=masked&addr=0&signature=abc"
+		sessionKey       = "entitlement-session=abc123"
+		endpoint         = "https://ts43.example.test/ts43"
+		initialSetCookie = sessionKey + "; Domain=.msg.t-mobile.com; Path=/; Secure; HttpOnly"
+		finalSetCookie   = "portal-route=west; Domain=.t-mobile.com; Path=/; SameSite=None; Secure"
 	)
 	identityRequest := eapaka.Packet{
 		Code: eapaka.CodeRequest, Identifier: 9, Type: eapaka.TypeAKA,
@@ -42,7 +44,7 @@ func TestStartEmergencyAddressUpdateRunsTMobileTS43WebsheetFlow(t *testing.T) {
 		case 1:
 			assertTMobileInitialRequest(t, r, permanent, imei)
 			return &HTTPResponse{StatusCode: http.StatusOK,
-				Headers: []HeaderPair{{Key: "Content-Type", Value: tmobileEAPRelayContentType}, {Key: "Set-Cookie", Value: sessionKey + "; Path=/; Secure; HttpOnly"}},
+				Headers: []HeaderPair{{Key: "Content-Type", Value: tmobileEAPRelayContentType}, {Key: "Set-Cookie", Value: initialSetCookie}},
 				Body:    []byte(`{"eap-relay-packet":"` + identityRelay + `"}`)}
 		case 2:
 			if r.Method != http.MethodPost || testHeader(r.Headers, "Content-Type") != tmobileEAPRelayContentType {
@@ -52,7 +54,10 @@ func TestStartEmergencyAddressUpdateRunsTMobileTS43WebsheetFlow(t *testing.T) {
 				t.Errorf("follow-up cookie=%q", testHeader(r.Headers, "Cookie"))
 			}
 			assertTMobileIdentityAnswer(t, bytes.NewReader(r.Body), permanent)
-			return &HTTPResponse{StatusCode: http.StatusOK, Headers: []HeaderPair{{Key: "Content-Type", Value: "text/vnd.wap.connectivity-xml"}}, Body: []byte(`<?xml version="1.0"?>
+			return &HTTPResponse{StatusCode: http.StatusOK, Headers: []HeaderPair{
+				{Key: "Content-Type", Value: "text/vnd.wap.connectivity-xml"},
+				{Key: "Set-Cookie", Value: finalSetCookie},
+			}, Body: []byte(`<?xml version="1.0"?>
 <wap-provisioningdoc version="1.1">
   <characteristic type="APPLICATION">
     <parm name="AppID" value="ap2004"/>
@@ -85,6 +90,31 @@ func TestStartEmergencyAddressUpdateRunsTMobileTS43WebsheetFlow(t *testing.T) {
 	}
 	if response.ContentType != tmobileWebsheetContentType || response.Title != "E911 address" {
 		t.Fatalf("websheet metadata=%+v", response)
+	}
+	if response.WebsheetProfile != WebsheetProfileIOSSafari {
+		t.Fatalf("websheet profile=%q", response.WebsheetProfile)
+	}
+	wantSeeds := []CookieSeed{
+		{SourceURL: client.requests[0].URL, SetCookie: initialSetCookie},
+		{SourceURL: endpoint, SetCookie: finalSetCookie},
+	}
+	if len(response.CookieSeeds) != len(wantSeeds) {
+		t.Fatalf("cookie seeds=%+v", response.CookieSeeds)
+	}
+	for index, want := range wantSeeds {
+		if got := response.CookieSeeds[index]; got != want {
+			t.Errorf("cookie seed %d=%+v want %+v", index, got, want)
+		}
+	}
+}
+
+func TestTMobileFallbackUsesIOSSafariWebsheetProfile(t *testing.T) {
+	response, err := startTMobileEntitlementFlow(context.Background(), Request{}, "", "https://wifi.t-mobile.test/e911")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if response.WebsheetProfile != WebsheetProfileIOSSafari {
+		t.Fatalf("websheet profile=%q", response.WebsheetProfile)
 	}
 }
 

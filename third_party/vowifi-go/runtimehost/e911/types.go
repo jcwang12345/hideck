@@ -15,6 +15,8 @@ var (
 	ErrWebsheetUnavailable     = errors.New("e911 websheet unavailable")
 )
 
+const WebsheetProfileIOSSafari = "ios-safari"
+
 type Identity struct {
 	IMSI        string
 	ICCID       string
@@ -71,6 +73,11 @@ type Request struct {
 	URL                 string
 }
 
+type CookieSeed struct {
+	SourceURL string
+	SetCookie string
+}
+
 type Response struct {
 	URL                 string
 	UserData            string
@@ -79,6 +86,8 @@ type Response struct {
 	EAPNextPseudonym    string
 	EAPNextReauthID     string
 	EAPReauthentication swu.EAPReauthenticationState
+	CookieSeeds         []CookieSeed
+	WebsheetProfile     string
 }
 
 type WebsheetRequest = Response

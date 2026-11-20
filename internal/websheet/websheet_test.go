@@ -5,6 +5,7 @@ import (
 	"errors"
 	"io"
 	"net/http"
+	"net/http/cookiejar"
 	"net/http/httptest"
 	"net/url"
 	"regexp"
@@ -104,6 +105,92 @@ func TestPostBootstrapProxiesRawUserDataBody(t *testing.T) {
 	if gotContentType != "application/x-www-form-urlencoded" {
 		t.Fatalf("Content-Type=%q want application/x-www-form-urlencoded", gotContentType)
 	}
+}
+
+func TestIOSSafariProfileNormalizesBootstrapRequest(t *testing.T) {
+	var gotHeader http.Header
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotHeader = r.Header.Clone()
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		_, _ = io.WriteString(w, "<!doctype html><html><body>address form</body></html>")
+	}))
+	defer upstream.Close()
+
+	b := New(Config{AllowPrivateHosts: true})
+	s, err := b.Create(context.Background(), Request{
+		URL:           upstream.URL + "/e911",
+		UserData:      "signed=payload",
+		ContentType:   "application/x-www-form-urlencoded",
+		HeaderProfile: HeaderProfileIOSSafari,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	bootstrapReq := httptest.NewRequest(http.MethodGet, s.Info().EmbedURL, nil)
+	bootstrapRec := httptest.NewRecorder()
+	if err := s.ServeBootstrap(bootstrapRec, bootstrapReq); err != nil {
+		t.Fatal(err)
+	}
+	action := extractFormAction(t, bootstrapRec.Body.String())
+
+	proxyReq := httptest.NewRequest(http.MethodPost, action, nil)
+	proxyReq.Header.Set("User-Agent", "Mozilla/5.0 Chrome/131.0")
+	proxyReq.Header.Set("Sec-CH-UA", `"Chromium";v="131"`)
+	proxyReq.Header.Set("Sec-CH-UA-Platform", `"macOS"`)
+	proxyReq.Header.Set("Content-Type", "application/json")
+	proxyReq.Header.Set("Origin", "https://hideck.example")
+	proxyRec := httptest.NewRecorder()
+	if err := s.Proxy(proxyRec, proxyReq); err != nil {
+		t.Fatal(err)
+	}
+
+	if gotHeader.Get("User-Agent") != iosSafariUserAgent {
+		t.Fatalf("User-Agent=%q", gotHeader.Get("User-Agent"))
+	}
+	if gotHeader.Get("Sec-CH-UA") != "" || gotHeader.Get("Sec-CH-UA-Platform") != "" {
+		t.Fatalf("client hints leaked upstream: %v", gotHeader)
+	}
+	if gotHeader.Get("Origin") != "" || gotHeader.Get("Referer") != "" {
+		t.Fatalf("bootstrap forged origin headers: origin=%q referer=%q", gotHeader.Get("Origin"), gotHeader.Get("Referer"))
+	}
+	if gotHeader.Get("Content-Type") != "application/x-www-form-urlencoded" {
+		t.Fatalf("Content-Type=%q", gotHeader.Get("Content-Type"))
+	}
+}
+
+func TestSeedCookieJarPreservesDomainScope(t *testing.T) {
+	jar, err := cookiejar.New(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = seedCookieJar(jar, []CookieSeed{
+		{SourceURL: "https://ts43.eas3.msg.t-mobile.com/ts43", SetCookie: "shared=ready; Domain=.t-mobile.com; Path=/; Secure; HttpOnly"},
+		{SourceURL: "https://ts43.eas3.msg.t-mobile.com/ts43", SetCookie: "host_only=private; Path=/; Secure; HttpOnly"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	cookies := jar.Cookies(mustURL(t, "https://ke911.t-mobile.com/e911-ui-entrypoint/e911address.do"))
+	values := make(map[string]string, len(cookies))
+	for _, cookie := range cookies {
+		values[cookie.Name] = cookie.Value
+	}
+	if values["shared"] != "ready" {
+		t.Fatalf("domain cookie missing: %v", values)
+	}
+	if _, ok := values["host_only"]; ok {
+		t.Fatalf("host-only cookie crossed subdomains: %v", values)
+	}
+}
+
+func mustURL(t *testing.T, raw string) *url.URL {
+	t.Helper()
+	parsed, err := url.Parse(raw)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return parsed
 }
 
 func TestRequestTransportPersistsAcrossRedirectsAndCookies(t *testing.T) {

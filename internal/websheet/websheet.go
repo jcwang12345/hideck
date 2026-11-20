@@ -25,12 +25,14 @@ import (
 )
 
 const (
-	defaultTTL           = 10 * time.Minute
-	defaultClientTimeout = 45 * time.Second
-	defaultBasePath      = "/api/websheets"
-	callbackURLToken     = "{{CALLBACK_URL}}"
-	targetQueryParam     = "target_query"
-	bootstrapBodyParam   = "bootstrap_body"
+	defaultTTL             = 10 * time.Minute
+	defaultClientTimeout   = 45 * time.Second
+	defaultBasePath        = "/api/websheets"
+	callbackURLToken       = "{{CALLBACK_URL}}"
+	targetQueryParam       = "target_query"
+	bootstrapBodyParam     = "bootstrap_body"
+	HeaderProfileIOSSafari = "ios-safari"
+	iosSafariUserAgent     = "Mozilla/5.0 (iPhone; CPU iPhone OS 18_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.1 Mobile/15E148 Safari/604.1"
 )
 
 var (
@@ -60,11 +62,18 @@ type Broker struct {
 }
 
 type Request struct {
-	URL         string
-	UserData    string
-	ContentType string
-	Title       string
-	Transport   http.RoundTripper
+	URL           string
+	UserData      string
+	ContentType   string
+	Title         string
+	Transport     http.RoundTripper
+	CookieSeeds   []CookieSeed
+	HeaderProfile string
+}
+
+type CookieSeed struct {
+	SourceURL string
+	SetCookie string
 }
 
 type Info struct {
@@ -97,6 +106,7 @@ type Session struct {
 	userData          string
 	contentType       string
 	title             string
+	headerProfile     string
 	expiresAt         time.Time
 	basePath          string
 	client            *http.Client
@@ -142,6 +152,9 @@ func (b *Broker) Create(ctx context.Context, req Request) (*Session, error) {
 	if err != nil {
 		return nil, fmt.Errorf("create websheet cookie jar: %w", err)
 	}
+	if err := seedCookieJar(jar, req.CookieSeeds); err != nil {
+		return nil, err
+	}
 	id, err := randomID()
 	if err != nil {
 		return nil, err
@@ -157,6 +170,7 @@ func (b *Broker) Create(ctx context.Context, req Request) (*Session, error) {
 		userData:          strings.TrimSpace(req.UserData),
 		contentType:       strings.TrimSpace(req.ContentType),
 		title:             strings.TrimSpace(req.Title),
+		headerProfile:     strings.TrimSpace(req.HeaderProfile),
 		expiresAt:         b.now().Add(b.ttl),
 		basePath:          b.basePath,
 		now:               b.now,
@@ -338,15 +352,21 @@ func (s *Session) Proxy(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return fmt.Errorf("create websheet request: %w", err)
 	}
+	bootstrap := r.URL.Query().Get(bootstrapBodyParam) == "1"
 	copyProxyHeaders(req.Header, r.Header)
-	origin := targetOrigin(target)
-	if origin != "" {
-		req.Header.Set("Referer", origin+"/")
-		if body != nil {
-			req.Header.Set("Origin", origin)
+	applyHeaderProfile(req.Header, s.headerProfile, bootstrap)
+	if !bootstrap {
+		origin := targetOrigin(target)
+		if origin != "" {
+			req.Header.Set("Referer", origin+"/")
+			if body != nil {
+				req.Header.Set("Origin", origin)
+			}
 		}
 	}
-	if req.Header.Get("Content-Type") == "" && s.contentType != "" {
+	if bootstrap && s.contentType != "" {
+		req.Header.Set("Content-Type", s.contentType)
+	} else if req.Header.Get("Content-Type") == "" && s.contentType != "" {
 		req.Header.Set("Content-Type", s.contentType)
 	}
 	resp, err := s.client.Do(req)
@@ -609,7 +629,8 @@ func appendLocalQuery(raw string, key string, value string) string {
 
 func copyProxyHeaders(dst http.Header, src http.Header) {
 	for key, values := range src {
-		switch strings.ToLower(key) {
+		lowerKey := strings.ToLower(key)
+		switch lowerKey {
 		case "authorization", "cookie", "host", "referer", "origin", "content-length", "accept-encoding",
 			"connection", "sec-fetch-dest", "sec-fetch-mode", "sec-fetch-site", "sec-fetch-user":
 			continue
@@ -618,6 +639,44 @@ func copyProxyHeaders(dst http.Header, src http.Header) {
 			dst.Add(key, value)
 		}
 	}
+}
+
+func applyHeaderProfile(header http.Header, profile string, bootstrap bool) {
+	if !strings.EqualFold(strings.TrimSpace(profile), HeaderProfileIOSSafari) {
+		return
+	}
+	for key := range header {
+		if strings.HasPrefix(strings.ToLower(key), "sec-ch-ua") {
+			header.Del(key)
+		}
+	}
+	header.Set("User-Agent", iosSafariUserAgent)
+	header.Set("Accept-Language", "en-US,en;q=0.9")
+	if bootstrap {
+		header.Set("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8")
+	}
+}
+
+func seedCookieJar(jar http.CookieJar, seeds []CookieSeed) error {
+	for _, seed := range seeds {
+		sourceURL, err := url.Parse(strings.TrimSpace(seed.SourceURL))
+		if err != nil || !strings.EqualFold(sourceURL.Scheme, "https") || sourceURL.Host == "" {
+			return fmt.Errorf("invalid websheet cookie source URL")
+		}
+		setCookie := strings.TrimSpace(seed.SetCookie)
+		if setCookie == "" {
+			continue
+		}
+		header := make(http.Header)
+		header.Add("Set-Cookie", setCookie)
+		response := http.Response{Header: header}
+		cookies := response.Cookies()
+		if len(cookies) == 0 {
+			continue
+		}
+		jar.SetCookies(sourceURL, cookies)
+	}
+	return nil
 }
 
 func targetOrigin(target *url.URL) string {
